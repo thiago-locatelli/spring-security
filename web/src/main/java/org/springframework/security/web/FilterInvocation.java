@@ -36,6 +36,7 @@ import jakarta.servlet.ServletResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletRequestWrapper;
 import jakarta.servlet.http.HttpServletResponse;
+import org.jspecify.annotations.Nullable;
 
 import org.springframework.http.HttpHeaders;
 import org.springframework.security.web.util.UrlUtils;
@@ -62,11 +63,11 @@ public class FilterInvocation {
 		throw new UnsupportedOperationException("Dummy filter chain");
 	};
 
-	private FilterChain chain;
+	private final FilterChain chain;
 
 	private HttpServletRequest request;
 
-	private HttpServletResponse response;
+	private @Nullable HttpServletResponse response;
 
 	public FilterInvocation(ServletRequest request, ServletResponse response, FilterChain chain) {
 		Assert.isTrue(request != null && response != null && chain != null, "Cannot pass null values to constructor");
@@ -79,11 +80,12 @@ public class FilterInvocation {
 		this(null, servletPath, method);
 	}
 
-	public FilterInvocation(String contextPath, String servletPath, String method) {
+	public FilterInvocation(@Nullable String contextPath, String servletPath, String method) {
 		this(contextPath, servletPath, method, null);
 	}
 
-	public FilterInvocation(String contextPath, String servletPath, String method, ServletContext servletContext) {
+	public FilterInvocation(@Nullable String contextPath, String servletPath, @Nullable String method,
+			@Nullable ServletContext servletContext) {
 		this(contextPath, servletPath, null, null, method, servletContext);
 	}
 
@@ -91,8 +93,8 @@ public class FilterInvocation {
 		this(contextPath, servletPath, pathInfo, query, method, null);
 	}
 
-	public FilterInvocation(String contextPath, String servletPath, String pathInfo, String query, String method,
-			ServletContext servletContext) {
+	public FilterInvocation(@Nullable String contextPath, String servletPath, @Nullable String pathInfo,
+			@Nullable String query, @Nullable String method, @Nullable ServletContext servletContext) {
 		DummyRequest request = new DummyRequest();
 		contextPath = (contextPath != null) ? contextPath : "/cp";
 		request.setContextPath(contextPath);
@@ -103,6 +105,7 @@ public class FilterInvocation {
 		request.setMethod(method);
 		request.setServletContext(servletContext);
 		this.request = request;
+		this.chain = DUMMY_CHAIN;
 	}
 
 	public FilterChain getChain() {
@@ -112,8 +115,6 @@ public class FilterInvocation {
 	/**
 	 * Indicates the URL that the user agent used for this request.
 	 * <p>
-	 * The returned URL does <b>not</b> reflect the port number determined from a
-	 * {@link org.springframework.security.web.PortResolver}.
 	 * @return the full URL of this request
 	 */
 	public String getFullRequestUrl() {
@@ -124,7 +125,7 @@ public class FilterInvocation {
 		return this.request;
 	}
 
-	public HttpServletResponse getHttpResponse() {
+	public @Nullable HttpServletResponse getHttpResponse() {
 		return this.response;
 	}
 
@@ -140,7 +141,7 @@ public class FilterInvocation {
 		return getHttpRequest();
 	}
 
-	public HttpServletResponse getResponse() {
+	public @Nullable HttpServletResponse getResponse() {
 		return getHttpResponse();
 	}
 
@@ -160,19 +161,19 @@ public class FilterInvocation {
 				DummyRequest.class.getClassLoader(), new Class[] { HttpServletRequest.class },
 				new UnsupportedOperationExceptionInvocationHandler());
 
-		private String requestURI;
+		private @Nullable String requestURI;
 
 		private String contextPath = "";
 
-		private String servletPath;
+		private @Nullable String servletPath;
 
-		private String pathInfo;
+		private @Nullable String pathInfo;
 
-		private String queryString;
+		private @Nullable String queryString;
 
-		private String method;
+		private @Nullable String method;
 
-		private ServletContext servletContext;
+		private @Nullable ServletContext servletContext;
 
 		private final HttpHeaders headers = new HttpHeaders();
 
@@ -188,7 +189,7 @@ public class FilterInvocation {
 		}
 
 		@Override
-		public Object getAttribute(String attributeName) {
+		public @Nullable Object getAttribute(String attributeName) {
 			return null;
 		}
 
@@ -196,12 +197,12 @@ public class FilterInvocation {
 			this.requestURI = requestURI;
 		}
 
-		void setPathInfo(String pathInfo) {
+		void setPathInfo(@Nullable String pathInfo) {
 			this.pathInfo = pathInfo;
 		}
 
 		@Override
-		public String getRequestURI() {
+		public @Nullable String getRequestURI() {
 			return this.requestURI;
 		}
 
@@ -219,40 +220,40 @@ public class FilterInvocation {
 		}
 
 		@Override
-		public String getServletPath() {
+		public @Nullable String getServletPath() {
 			return this.servletPath;
 		}
 
-		void setMethod(String method) {
+		void setMethod(@Nullable String method) {
 			this.method = method;
 		}
 
 		@Override
-		public String getMethod() {
+		public @Nullable String getMethod() {
 			return this.method;
 		}
 
 		@Override
-		public String getPathInfo() {
+		public @Nullable String getPathInfo() {
 			return this.pathInfo;
 		}
 
 		@Override
-		public String getQueryString() {
+		public @Nullable String getQueryString() {
 			return this.queryString;
 		}
 
-		void setQueryString(String queryString) {
+		void setQueryString(@Nullable String queryString) {
 			this.queryString = queryString;
 		}
 
 		@Override
-		public String getServerName() {
+		public @Nullable String getServerName() {
 			return null;
 		}
 
 		@Override
-		public String getHeader(String name) {
+		public @Nullable String getHeader(String name) {
 			return this.headers.getFirst(name);
 		}
 
@@ -284,7 +285,7 @@ public class FilterInvocation {
 		}
 
 		@Override
-		public String getParameter(String name) {
+		public @Nullable String getParameter(String name) {
 			String[] array = this.parameters.get(name);
 			return (array != null && array.length > 0) ? array[0] : null;
 		}
@@ -300,7 +301,7 @@ public class FilterInvocation {
 		}
 
 		@Override
-		public String[] getParameterValues(String name) {
+		public String @Nullable [] getParameterValues(String name) {
 			return this.parameters.get(name);
 		}
 
@@ -309,11 +310,11 @@ public class FilterInvocation {
 		}
 
 		@Override
-		public ServletContext getServletContext() {
+		public @Nullable ServletContext getServletContext() {
 			return this.servletContext;
 		}
 
-		void setServletContext(ServletContext servletContext) {
+		void setServletContext(@Nullable ServletContext servletContext) {
 			this.servletContext = servletContext;
 		}
 

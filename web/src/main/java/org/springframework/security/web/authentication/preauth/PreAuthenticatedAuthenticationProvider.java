@@ -16,8 +16,14 @@
 
 package org.springframework.security.web.authentication.preauth;
 
+import java.util.Collection;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.function.Supplier;
+
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.jspecify.annotations.Nullable;
 
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.core.Ordered;
@@ -27,6 +33,7 @@ import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.userdetails.AuthenticationUserDetailsService;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsChecker;
@@ -51,9 +58,12 @@ public class PreAuthenticatedAuthenticationProvider implements AuthenticationPro
 
 	private static final Log logger = LogFactory.getLog(PreAuthenticatedAuthenticationProvider.class);
 
+	@SuppressWarnings("NullAway.Init")
 	private AuthenticationUserDetailsService<PreAuthenticatedAuthenticationToken> preAuthenticatedUserDetailsService;
 
 	private UserDetailsChecker userDetailsChecker = new AccountStatusUserDetailsChecker();
+
+	private Supplier<Collection<GrantedAuthority>> grantedAuthoritySupplier = List::of;
 
 	private boolean throwExceptionWhenTokenRejected;
 
@@ -74,7 +84,7 @@ public class PreAuthenticatedAuthenticationProvider implements AuthenticationPro
 	 * be ignored to allow other providers to authenticate it.
 	 */
 	@Override
-	public Authentication authenticate(Authentication authentication) throws AuthenticationException {
+	public @Nullable Authentication authenticate(Authentication authentication) throws AuthenticationException {
 		if (!supports(authentication.getClass())) {
 			return null;
 		}
@@ -96,8 +106,10 @@ public class PreAuthenticatedAuthenticationProvider implements AuthenticationPro
 		UserDetails userDetails = this.preAuthenticatedUserDetailsService
 			.loadUserDetails((PreAuthenticatedAuthenticationToken) authentication);
 		this.userDetailsChecker.check(userDetails);
+		Collection<GrantedAuthority> authorities = new LinkedHashSet<>(userDetails.getAuthorities());
+		authorities.addAll(this.grantedAuthoritySupplier.get());
 		PreAuthenticatedAuthenticationToken result = new PreAuthenticatedAuthenticationToken(userDetails,
-				authentication.getCredentials(), userDetails.getAuthorities());
+				authentication.getCredentials(), authorities);
 		result.setDetails(authentication.getDetails());
 		return result;
 	}
@@ -138,6 +150,15 @@ public class PreAuthenticatedAuthenticationProvider implements AuthenticationPro
 	public void setUserDetailsChecker(UserDetailsChecker userDetailsChecker) {
 		Assert.notNull(userDetailsChecker, "userDetailsChecker cannot be null");
 		this.userDetailsChecker = userDetailsChecker;
+	}
+
+	/**
+	 * Sets authorities that this provider should grant once authentication completes
+	 * @param grantedAuthoritySupplier the supplier that grants authorities
+	 */
+	public void setGrantedAuthoritySupplier(Supplier<Collection<GrantedAuthority>> grantedAuthoritySupplier) {
+		Assert.notNull(grantedAuthoritySupplier, "grantedAuthoritySupplier cannot be null");
+		this.grantedAuthoritySupplier = grantedAuthoritySupplier;
 	}
 
 	@Override

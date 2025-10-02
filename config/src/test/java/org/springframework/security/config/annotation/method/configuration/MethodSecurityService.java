@@ -93,6 +93,12 @@ public interface MethodSecurityService {
 	@PreAuthorize("hasRole('USER')")
 	void preAuthorizeUser();
 
+	@PreAuthorize("hasAllRoles('USER', 'ADMIN')")
+	void hasAllRolesUserAdmin();
+
+	@PreAuthorize("hasAllAuthorities('ROLE_USER', 'ROLE_ADMIN')")
+	void hasAllAuthoritiesRoleUserRoleAdmin();
+
 	@PreAuthorize("hasPermission(#object,'read')")
 	String hasPermission(String object);
 
@@ -189,6 +195,9 @@ public interface MethodSecurityService {
 	@PostAuthorize("@authz.checkResult(!#result)")
 	@HandleAuthorizationDenied(handlerClass = MethodAuthorizationDeniedHandler.class)
 	String checkCustomResult(boolean result);
+
+	@PreAuthorize("@authz.checkManager(#id)")
+	String checkCustomManager(long id);
 
 	class StarMaskingHandler implements MethodAuthorizationDeniedHandler {
 

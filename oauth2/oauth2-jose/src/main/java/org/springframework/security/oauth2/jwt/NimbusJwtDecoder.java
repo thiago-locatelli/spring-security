@@ -66,6 +66,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.RequestEntity;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.security.oauth2.core.OAuth2Error;
 import org.springframework.security.oauth2.core.OAuth2TokenValidator;
 import org.springframework.security.oauth2.core.OAuth2TokenValidatorResult;
@@ -84,6 +85,7 @@ import org.springframework.web.client.RestTemplate;
  * @author Joe Grandja
  * @author Mykyta Bezverkhyi
  * @author Daeho Kwon
+ * @author Andrey Litvitski
  * @since 5.2
  */
 public final class NimbusJwtDecoder implements JwtDecoder {
@@ -293,7 +295,7 @@ public final class NimbusJwtDecoder implements JwtDecoder {
 
 		private final Set<SignatureAlgorithm> signatureAlgorithms = new HashSet<>();
 
-		private RestOperations restOperations = new RestTemplate();
+		private RestOperations restOperations = new RestTemplateWithNimbusDefaultTimeouts();
 
 		private Cache cache = new NoOpCache("default");
 
@@ -415,6 +417,16 @@ public final class NimbusJwtDecoder implements JwtDecoder {
 		public JwkSetUriJwtDecoderBuilder cache(Cache cache) {
 			Assert.notNull(cache, "cache cannot be null");
 			this.cache = cache;
+			return this;
+		}
+
+		/**
+		 * Enables discovery of supported JWS algorithms from the remote JWK Set.
+		 * @return a {@link JwkSetUriJwtDecoderBuilder} for further configuration
+		 * @since 7.0.0
+		 */
+		public JwkSetUriJwtDecoderBuilder discoverJwsAlgorithms() {
+			this.defaultAlgorithms = JwtDecoderProviderConfigurationUtils::getJWSAlgorithms;
 			return this;
 		}
 
@@ -541,6 +553,21 @@ public final class NimbusJwtDecoder implements JwtDecoder {
 
 			}
 
+		}
+
+	}
+
+	/**
+	 * A RestTemplate with timeouts configured to avoid blocking indefinitely when
+	 * fetching JWK Sets while holding the reentrantLock.
+	 */
+	private static final class RestTemplateWithNimbusDefaultTimeouts extends RestTemplate {
+
+		private RestTemplateWithNimbusDefaultTimeouts() {
+			SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+			requestFactory.setConnectTimeout(JWKSourceBuilder.DEFAULT_HTTP_CONNECT_TIMEOUT);
+			requestFactory.setReadTimeout(JWKSourceBuilder.DEFAULT_HTTP_READ_TIMEOUT);
+			setRequestFactory(requestFactory);
 		}
 
 	}

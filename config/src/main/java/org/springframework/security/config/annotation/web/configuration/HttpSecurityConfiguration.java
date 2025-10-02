@@ -16,19 +16,24 @@
 
 package org.springframework.security.config.annotation.web.configuration;
 
+import java.lang.reflect.Modifier;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Scope;
+import org.springframework.core.MethodParameter;
+import org.springframework.core.ResolvableType;
 import org.springframework.core.io.support.SpringFactoriesLoader;
 import org.springframework.security.authentication.AuthenticationEventPublisher;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.DefaultAuthenticationEventPublisher;
+import org.springframework.security.config.Customizer;
 import org.springframework.security.config.ObjectPostProcessor;
 import org.springframework.security.config.annotation.authentication.builders.AuthenticationManagerBuilder;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
@@ -38,12 +43,16 @@ import org.springframework.security.config.annotation.authentication.configurers
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.annotation.web.configurers.DefaultLoginPageConfigurer;
+import org.springframework.security.config.web.PathPatternRequestMatcherBuilderFactoryBean;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.context.SecurityContextHolderStrategy;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.factory.PasswordEncoderFactories;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.context.request.async.WebAsyncManagerIntegrationFilter;
+import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
+import org.springframework.util.ReflectionUtils;
+import org.springframework.util.function.ThrowingSupplier;
 import org.springframework.web.accept.ContentNegotiationStrategy;
 import org.springframework.web.accept.HeaderContentNegotiationStrategy;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -103,7 +112,7 @@ class HttpSecurityConfiguration {
 
 	@Bean(HTTPSECURITY_BEAN_NAME)
 	@Scope("prototype")
-	HttpSecurity httpSecurity() throws Exception {
+	HttpSecurity httpSecurity() {
 		LazyPasswordEncoder passwordEncoder = new LazyPasswordEncoder(this.context);
 		AuthenticationManagerBuilder authenticationBuilder = new DefaultPasswordEncoderAuthenticationManagerBuilder(
 				this.objectPostProcessor, passwordEncoder);
@@ -128,16 +137,18 @@ class HttpSecurityConfiguration {
 		// @formatter:on
 		applyCorsIfAvailable(http);
 		applyDefaultConfigurers(http);
+		applyHttpSecurityCustomizers(this.context, http);
+		applyTopLevelCustomizers(this.context, http);
 		return http;
 	}
 
-	private void applyCorsIfAvailable(HttpSecurity http) throws Exception {
+	private void applyCorsIfAvailable(HttpSecurity http) {
 		if (this.context.getBeanNamesForType(UrlBasedCorsConfigurationSource.class).length > 0) {
 			http.cors(withDefaults());
 		}
 	}
 
-	private AuthenticationManager authenticationManager() throws Exception {
+	private AuthenticationManager authenticationManager() {
 		return this.authenticationConfiguration.getAuthenticationManager();
 	}
 
@@ -148,7 +159,7 @@ class HttpSecurityConfiguration {
 		return this.objectPostProcessor.postProcess(new DefaultAuthenticationEventPublisher());
 	}
 
-	private void applyDefaultConfigurers(HttpSecurity http) throws Exception {
+	private void applyDefaultConfigurers(HttpSecurity http) {
 		ClassLoader classLoader = this.context.getClassLoader();
 		List<AbstractHttpConfigurer> defaultHttpConfigurers = SpringFactoriesLoader
 			.loadFactories(AbstractHttpConfigurer.class, classLoader);
@@ -157,11 +168,86 @@ class HttpSecurityConfiguration {
 		}
 	}
 
+	/**
+	 * Applies all {@code Customizer<HttpSecurity>} Bean instances to the
+	 * {@link HttpSecurity} instance.
+	 * @param applicationContext the {@link ApplicationContext} to lookup Bean instances
+	 * @param http the {@link HttpSecurity} to apply the Beans to.
+	 */
+	private void applyHttpSecurityCustomizers(ApplicationContext applicationContext, HttpSecurity http) {
+		ResolvableType httpSecurityCustomizerType = ResolvableType.forClassWithGenerics(Customizer.class,
+				HttpSecurity.class);
+		ObjectProvider<Customizer<HttpSecurity>> customizerProvider = this.context
+			.getBeanProvider(httpSecurityCustomizerType);
+
+		// @formatter:off
+		customizerProvider.orderedStream().forEach((customizer) ->
+				customizer.customize(http)
+		);
+		// @formatter:on
+	}
+
+	/**
+	 * Applies all {@link Customizer} Beans to {@link HttpSecurity}. For each public,
+	 * non-static method in HttpSecurity that accepts a Customizer
+	 * <ul>
+	 * <li>Use the {@link MethodParameter} (this preserves generics) to resolve all Beans
+	 * for that type</li>
+	 * <li>For each {@link Customizer} Bean invoke the {@link java.lang.reflect.Method}
+	 * with the {@link Customizer} Bean as the argument</li>
+	 * </ul>
+	 * @param context the {@link ApplicationContext}
+	 * @param http the {@link HttpSecurity} @
+	 */
+	private void applyTopLevelCustomizers(ApplicationContext context, HttpSecurity http) {
+		ReflectionUtils.MethodFilter isCustomizerMethod = (method) -> {
+			if (Modifier.isStatic(method.getModifiers())) {
+				return false;
+			}
+			if (!Modifier.isPublic(method.getModifiers())) {
+				return false;
+			}
+			if (!method.canAccess(http)) {
+				return false;
+			}
+			if (method.getParameterCount() != 1) {
+				return false;
+			}
+			if (method.getParameterTypes()[0] == Customizer.class) {
+				return true;
+			}
+			return false;
+		};
+		ReflectionUtils.MethodCallback invokeWithEachCustomizerBean = (customizerMethod) -> {
+
+			MethodParameter customizerParameter = new MethodParameter(customizerMethod, 0);
+			ResolvableType customizerType = ResolvableType.forMethodParameter(customizerParameter);
+			ObjectProvider<?> customizerProvider = context.getBeanProvider(customizerType);
+
+			// @formatter:off
+			customizerProvider.orderedStream().forEach((customizer) ->
+				ReflectionUtils.invokeMethod(customizerMethod, http, customizer)
+			);
+			// @formatter:on
+
+		};
+		ReflectionUtils.doWithMethods(HttpSecurity.class, invokeWithEachCustomizerBean, isCustomizerMethod);
+	}
+
 	private Map<Class<?>, Object> createSharedObjects() {
 		Map<Class<?>, Object> sharedObjects = new HashMap<>();
 		sharedObjects.put(ApplicationContext.class, this.context);
 		sharedObjects.put(ContentNegotiationStrategy.class, this.contentNegotiationStrategy);
+		sharedObjects.put(PathPatternRequestMatcher.Builder.class, constructRequestMatcherBuilder(this.context));
 		return sharedObjects;
+	}
+
+	private PathPatternRequestMatcher.Builder constructRequestMatcherBuilder(ApplicationContext context) {
+		PathPatternRequestMatcherBuilderFactoryBean requestMatcherBuilder = new PathPatternRequestMatcherBuilderFactoryBean();
+		requestMatcherBuilder.setApplicationContext(context);
+		requestMatcherBuilder.setBeanFactory(context.getAutowireCapableBeanFactory());
+		requestMatcherBuilder.setBeanName(requestMatcherBuilder.toString());
+		return ThrowingSupplier.of(requestMatcherBuilder::getObject).get();
 	}
 
 	static class DefaultPasswordEncoderAuthenticationManagerBuilder extends AuthenticationManagerBuilder {
@@ -179,19 +265,18 @@ class HttpSecurityConfiguration {
 		}
 
 		@Override
-		public InMemoryUserDetailsManagerConfigurer<AuthenticationManagerBuilder> inMemoryAuthentication()
-				throws Exception {
+		public InMemoryUserDetailsManagerConfigurer<AuthenticationManagerBuilder> inMemoryAuthentication() {
 			return super.inMemoryAuthentication().passwordEncoder(this.defaultPasswordEncoder);
 		}
 
 		@Override
-		public JdbcUserDetailsManagerConfigurer<AuthenticationManagerBuilder> jdbcAuthentication() throws Exception {
+		public JdbcUserDetailsManagerConfigurer<AuthenticationManagerBuilder> jdbcAuthentication() {
 			return super.jdbcAuthentication().passwordEncoder(this.defaultPasswordEncoder);
 		}
 
 		@Override
 		public <T extends UserDetailsService> DaoAuthenticationConfigurer<AuthenticationManagerBuilder, T> userDetailsService(
-				T userDetailsService) throws Exception {
+				T userDetailsService) {
 			return super.userDetailsService(userDetailsService).passwordEncoder(this.defaultPasswordEncoder);
 		}
 

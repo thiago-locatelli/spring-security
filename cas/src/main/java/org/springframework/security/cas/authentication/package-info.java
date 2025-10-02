@@ -18,4 +18,7 @@
  * An {@code AuthenticationProvider} that can process CAS service tickets and proxy
  * tickets.
  */
+@NullMarked
 package org.springframework.security.cas.authentication;
+
+import org.jspecify.annotations.NullMarked;

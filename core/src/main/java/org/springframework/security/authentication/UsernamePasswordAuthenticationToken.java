@@ -21,7 +21,6 @@ import java.util.Collection;
 import org.jspecify.annotations.Nullable;
 
 import org.springframework.security.core.GrantedAuthority;
-import org.springframework.security.core.SpringSecurityCoreVersion;
 import org.springframework.util.Assert;
 
 /**
@@ -38,9 +37,9 @@ import org.springframework.util.Assert;
  */
 public class UsernamePasswordAuthenticationToken extends AbstractAuthenticationToken {
 
-	private static final long serialVersionUID = SpringSecurityCoreVersion.SERIAL_VERSION_UID;
+	private static final long serialVersionUID = 620L;
 
-	private final Object principal;
+	private final @Nullable Object principal;
 
 	private @Nullable Object credentials;
 
@@ -50,8 +49,8 @@ public class UsernamePasswordAuthenticationToken extends AbstractAuthenticationT
 	 * will return <code>false</code>.
 	 *
 	 */
-	public UsernamePasswordAuthenticationToken(Object principal, @Nullable Object credentials) {
-		super(null);
+	public UsernamePasswordAuthenticationToken(@Nullable Object principal, @Nullable Object credentials) {
+		super((Collection<? extends GrantedAuthority>) null);
 		this.principal = principal;
 		this.credentials = credentials;
 		setAuthenticated(false);
@@ -74,6 +73,12 @@ public class UsernamePasswordAuthenticationToken extends AbstractAuthenticationT
 		super.setAuthenticated(true); // must use super, as we override
 	}
 
+	protected UsernamePasswordAuthenticationToken(Builder<?> builder) {
+		super(builder);
+		this.principal = builder.principal;
+		this.credentials = builder.credentials;
+	}
+
 	/**
 	 * This factory method can be safely used by any code that wishes to create a
 	 * unauthenticated <code>UsernamePasswordAuthenticationToken</code>.
@@ -83,7 +88,8 @@ public class UsernamePasswordAuthenticationToken extends AbstractAuthenticationT
 	 *
 	 * @since 5.7
 	 */
-	public static UsernamePasswordAuthenticationToken unauthenticated(Object principal, @Nullable Object credentials) {
+	public static UsernamePasswordAuthenticationToken unauthenticated(@Nullable Object principal,
+			@Nullable Object credentials) {
 		return new UsernamePasswordAuthenticationToken(principal, credentials);
 	}
 
@@ -107,7 +113,7 @@ public class UsernamePasswordAuthenticationToken extends AbstractAuthenticationT
 	}
 
 	@Override
-	public Object getPrincipal() {
+	public @Nullable Object getPrincipal() {
 		return this.principal;
 	}
 
@@ -122,6 +128,48 @@ public class UsernamePasswordAuthenticationToken extends AbstractAuthenticationT
 	public void eraseCredentials() {
 		super.eraseCredentials();
 		this.credentials = null;
+	}
+
+	@Override
+	public Builder<?> toBuilder() {
+		return new Builder<>(this);
+	}
+
+	/**
+	 * A builder of {@link UsernamePasswordAuthenticationToken} instances
+	 *
+	 * @since 7.0
+	 */
+	public static class Builder<B extends Builder<B>> extends AbstractAuthenticationBuilder<B> {
+
+		private @Nullable Object principal;
+
+		private @Nullable Object credentials;
+
+		protected Builder(UsernamePasswordAuthenticationToken token) {
+			super(token);
+			this.principal = token.principal;
+			this.credentials = token.credentials;
+		}
+
+		@Override
+		public B principal(@Nullable Object principal) {
+			Assert.notNull(principal, "principal cannot be null");
+			this.principal = principal;
+			return (B) this;
+		}
+
+		@Override
+		public B credentials(@Nullable Object credentials) {
+			this.credentials = credentials;
+			return (B) this;
+		}
+
+		@Override
+		public UsernamePasswordAuthenticationToken build() {
+			return new UsernamePasswordAuthenticationToken(this);
+		}
+
 	}
 
 }

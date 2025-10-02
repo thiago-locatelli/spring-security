@@ -22,12 +22,14 @@ import java.lang.reflect.Method;
 
 import org.junit.jupiter.api.Test;
 
+import org.springframework.core.annotation.AnnotationConfigurationException;
 import org.springframework.security.oauth2.client.annotation.ClientRegistrationId;
 import org.springframework.security.oauth2.client.web.ClientAttributes;
 import org.springframework.util.ReflectionUtils;
 import org.springframework.web.service.invoker.HttpRequestValues;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 
 /**
  * Unit tests for {@link ClientRegistrationIdProcessor}.
@@ -39,6 +41,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class ClientRegistrationIdProcessorTests {
 
+	private static final String REGISTRATION_ID = "registrationId";
+
 	ClientRegistrationIdProcessor processor = ClientRegistrationIdProcessor.DEFAULT_INSTANCE;
 
 	@Test
@@ -48,7 +52,7 @@ class ClientRegistrationIdProcessorTests {
 		this.processor.process(hasClientRegistrationId, null, null, builder);
 
 		String registrationId = ClientAttributes.resolveClientRegistrationId(builder.build().getAttributes());
-		assertThat(registrationId).isEqualTo(RestService.REGISTRATION_ID);
+		assertThat(registrationId).isEqualTo(REGISTRATION_ID);
 	}
 
 	@Test
@@ -58,7 +62,7 @@ class ClientRegistrationIdProcessorTests {
 		this.processor.process(hasClientRegistrationId, null, null, builder);
 
 		String registrationId = ClientAttributes.resolveClientRegistrationId(builder.build().getAttributes());
-		assertThat(registrationId).isEqualTo(RestService.REGISTRATION_ID);
+		assertThat(registrationId).isEqualTo(REGISTRATION_ID);
 	}
 
 	@Test
@@ -71,9 +75,28 @@ class ClientRegistrationIdProcessorTests {
 		assertThat(registrationId).isNull();
 	}
 
-	interface RestService {
+	@Test
+	void processWhenClientRegistrationIdPresentOnDeclaringClassThenSet() {
+		HttpRequestValues.Builder builder = HttpRequestValues.builder();
+		Method declaringClassHasClientRegistrationId = ReflectionUtils.findMethod(TypeAnnotatedRestService.class,
+				"declaringClassHasClientRegistrationId");
+		this.processor.process(declaringClassHasClientRegistrationId, null, null, builder);
 
-		String REGISTRATION_ID = "registrationId";
+		String registrationId = ClientAttributes.resolveClientRegistrationId(builder.build().getAttributes());
+		assertThat(registrationId).isEqualTo(REGISTRATION_ID);
+	}
+
+	@Test
+	void processWhenDuplicateClientRegistrationIdPresentOnAggregateServiceThenException() {
+		HttpRequestValues.Builder builder = HttpRequestValues.builder();
+		Method shouldFailDueToDuplicateClientRegistrationId = ReflectionUtils.findMethod(AggregateRestService.class,
+				"shouldFailDueToDuplicateClientRegistrationId");
+
+		assertThatExceptionOfType(AnnotationConfigurationException.class).isThrownBy(
+				() -> this.processor.process(shouldFailDueToDuplicateClientRegistrationId, null, null, builder));
+	}
+
+	interface RestService {
 
 		@ClientRegistrationId(REGISTRATION_ID)
 		void hasClientRegistrationId();
@@ -86,8 +109,31 @@ class ClientRegistrationIdProcessorTests {
 	}
 
 	@Retention(RetentionPolicy.RUNTIME)
-	@ClientRegistrationId(RestService.REGISTRATION_ID)
+	@ClientRegistrationId(REGISTRATION_ID)
 	@interface MetaClientRegistrationId {
+
+	}
+
+	@ClientRegistrationId(REGISTRATION_ID)
+	interface TypeAnnotatedRestService {
+
+		void declaringClassHasClientRegistrationId();
+
+	}
+
+	@ClientRegistrationId("a")
+	interface ARestService {
+
+	}
+
+	@ClientRegistrationId("b")
+	interface BRestService {
+
+	}
+
+	interface AggregateRestService extends ARestService, BRestService {
+
+		void shouldFailDueToDuplicateClientRegistrationId();
 
 	}
 

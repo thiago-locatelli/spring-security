@@ -16,6 +16,9 @@
 
 package org.springframework.security.authentication.dao;
 
+import java.util.Collection;
+import java.util.LinkedHashSet;
+
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
@@ -33,7 +36,10 @@ import org.springframework.security.authentication.LockedException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
+import org.springframework.security.core.GrantedAuthorities;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.SpringSecurityMessageSource;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.authority.mapping.GrantedAuthoritiesMapper;
 import org.springframework.security.core.authority.mapping.NullAuthoritiesMapper;
 import org.springframework.security.core.userdetails.UserCache;
@@ -94,6 +100,8 @@ public abstract class AbstractUserDetailsAuthenticationProvider
 
 	private GrantedAuthoritiesMapper authoritiesMapper = new NullAuthoritiesMapper();
 
+	private static final String AUTHORITY = GrantedAuthorities.FACTOR_PASSWORD_AUTHORITY;
+
 	/**
 	 * Allows subclasses to perform any additional checks of a returned (or cached)
 	 * <code>UserDetails</code> for a given authentication request. Generally a subclass
@@ -114,7 +122,7 @@ public abstract class AbstractUserDetailsAuthenticationProvider
 			UsernamePasswordAuthenticationToken authentication) throws AuthenticationException;
 
 	@Override
-	public final void afterPropertiesSet() throws Exception {
+	public final void afterPropertiesSet() {
 		Assert.notNull(this.userCache, "A user cache must be set");
 		Assert.notNull(this.messages, "A message source must be set");
 		Assert.notNull(this.preAuthenticationChecks, "A pre authentication checks must be set");
@@ -197,14 +205,17 @@ public abstract class AbstractUserDetailsAuthenticationProvider
 		// so subsequent attempts are successful even with encoded passwords.
 		// Also ensure we return the original getDetails(), so that future
 		// authentication events after cache expiry contain the details
+		Collection<GrantedAuthority> authorities = new LinkedHashSet<>(
+				this.authoritiesMapper.mapAuthorities(user.getAuthorities()));
+		authorities.add(new SimpleGrantedAuthority(AUTHORITY));
 		UsernamePasswordAuthenticationToken result = UsernamePasswordAuthenticationToken.authenticated(principal,
-				authentication.getCredentials(), this.authoritiesMapper.mapAuthorities(user.getAuthorities()));
+				authentication.getCredentials(), authorities);
 		result.setDetails(authentication.getDetails());
 		this.logger.debug("Authenticated user");
 		return result;
 	}
 
-	protected void doAfterPropertiesSet() throws Exception {
+	protected void doAfterPropertiesSet() {
 	}
 
 	public UserCache getUserCache() {

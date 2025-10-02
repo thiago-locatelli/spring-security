@@ -18,7 +18,6 @@ package org.springframework.security.config.annotation.web.configurers;
 
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.LinkedHashMap;
 
 import jakarta.servlet.http.HttpServletRequest;
 
@@ -29,6 +28,7 @@ import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.HttpSecurityBuilder;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.core.GrantedAuthorities;
 import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.authentication.DelegatingAuthenticationEntryPoint;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
@@ -103,11 +103,12 @@ public final class HttpBasicConfigurer<B extends HttpSecurityBuilder<B>>
 	 */
 	public HttpBasicConfigurer() {
 		realmName(DEFAULT_REALM);
-		LinkedHashMap<RequestMatcher, AuthenticationEntryPoint> entryPoints = new LinkedHashMap<>();
-		entryPoints.put(X_REQUESTED_WITH, new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED));
-		DelegatingAuthenticationEntryPoint defaultEntryPoint = new DelegatingAuthenticationEntryPoint(entryPoints);
-		defaultEntryPoint.setDefaultEntryPoint(this.basicAuthEntryPoint);
-		this.authenticationEntryPoint = defaultEntryPoint;
+		// @formatter:off
+		this.authenticationEntryPoint = DelegatingAuthenticationEntryPoint.builder()
+				.addEntryPointFor(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED), X_REQUESTED_WITH)
+				.defaultEntryPoint(this.basicAuthEntryPoint)
+				.build();
+		// @formatter:on
 	}
 
 	/**
@@ -192,8 +193,11 @@ public final class HttpBasicConfigurer<B extends HttpSecurityBuilder<B>>
 		if (exceptionHandling == null) {
 			return;
 		}
-		exceptionHandling.defaultAuthenticationEntryPointFor(postProcess(this.authenticationEntryPoint),
-				preferredMatcher);
+		AuthenticationEntryPoint entryPoint = postProcess(this.authenticationEntryPoint);
+		exceptionHandling.defaultAuthenticationEntryPointFor(entryPoint, preferredMatcher);
+		exceptionHandling.defaultDeniedHandlerForMissingAuthority(
+				(ep) -> ep.addEntryPointFor(entryPoint, preferredMatcher),
+				GrantedAuthorities.FACTOR_PASSWORD_AUTHORITY);
 	}
 
 	private void registerDefaultLogoutSuccessHandler(B http, RequestMatcher preferredMatcher) {

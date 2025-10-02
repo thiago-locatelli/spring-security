@@ -27,6 +27,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.core.GrantedAuthorities;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -52,6 +54,8 @@ import static org.springframework.security.test.web.servlet.setup.SecurityMockMv
 @WebAppConfiguration
 public class SecurityMockWithAuthoritiesMvcResultMatchersTests {
 
+	private static final String ROLE_CUSTOM = "ROLE_CUSTOM";
+
 	@Autowired
 	private WebApplicationContext context;
 
@@ -67,6 +71,7 @@ public class SecurityMockWithAuthoritiesMvcResultMatchersTests {
 		List<SimpleGrantedAuthority> grantedAuthorities = new ArrayList<>();
 		grantedAuthorities.add(new SimpleGrantedAuthority("ROLE_ADMIN"));
 		grantedAuthorities.add(new SimpleGrantedAuthority("ROLE_SELLER"));
+		grantedAuthorities.add(new SimpleGrantedAuthority(GrantedAuthorities.FACTOR_PASSWORD_AUTHORITY));
 		this.mockMvc.perform(formLogin()).andExpect(authenticated().withAuthorities(grantedAuthorities));
 	}
 
@@ -78,6 +83,12 @@ public class SecurityMockWithAuthoritiesMvcResultMatchersTests {
 				() -> this.mockMvc.perform(formLogin()).andExpect(authenticated().withAuthorities(grantedAuthorities)));
 	}
 
+	@Test
+	public void withAuthoritiesStringSupportsCustomAuthority() throws Exception {
+		this.mockMvc.perform(formLogin().user("custom"))
+			.andExpect(authenticated().withAuthorities(ROLE_CUSTOM, GrantedAuthorities.FACTOR_PASSWORD_AUTHORITY));
+	}
+
 	@Configuration
 	@EnableWebSecurity
 	@EnableWebMvc
@@ -87,7 +98,8 @@ public class SecurityMockWithAuthoritiesMvcResultMatchersTests {
 		UserDetailsService userDetailsService() {
 			// @formatter:off
 			UserDetails user = User.withDefaultPasswordEncoder().username("user").password("password").roles("ADMIN", "SELLER").build();
-			return new InMemoryUserDetailsManager(user);
+			UserDetails customAuthorityUser = User.withDefaultPasswordEncoder().username("custom").password("password").authorities(new CustomAuthority(ROLE_CUSTOM)).build();
+			return new InMemoryUserDetailsManager(user, customAuthorityUser);
 			// @formatter:on
 		}
 
@@ -99,6 +111,27 @@ public class SecurityMockWithAuthoritiesMvcResultMatchersTests {
 				return "ok";
 			}
 
+		}
+
+	}
+
+	/**
+	 * A custom {@link GrantedAuthority} for testing.
+	 *
+	 * @author Rob Winch
+	 * @since 7.0
+	 */
+	static class CustomAuthority implements GrantedAuthority {
+
+		private final String authority;
+
+		CustomAuthority(String authority) {
+			this.authority = authority;
+		}
+
+		@Override
+		public String getAuthority() {
+			return this.authority;
 		}
 
 	}

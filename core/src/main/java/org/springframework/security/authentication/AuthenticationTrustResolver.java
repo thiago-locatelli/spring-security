@@ -16,6 +16,9 @@
 
 package org.springframework.security.authentication;
 
+import org.jspecify.annotations.Nullable;
+
+import org.springframework.lang.Contract;
 import org.springframework.security.core.Authentication;
 
 /**
@@ -37,7 +40,7 @@ public interface AuthenticationTrustResolver {
 	 * @return <code>true</code> the passed authentication token represented an anonymous
 	 * principal, <code>false</code> otherwise
 	 */
-	boolean isAnonymous(Authentication authentication);
+	boolean isAnonymous(@Nullable Authentication authentication);
 
 	/**
 	 * Indicates whether the passed <code>Authentication</code> token represents user that
@@ -51,7 +54,7 @@ public interface AuthenticationTrustResolver {
 	 * @return <code>true</code> the passed authentication token represented a principal
 	 * authenticated using a remember-me token, <code>false</code> otherwise
 	 */
-	boolean isRememberMe(Authentication authentication);
+	boolean isRememberMe(@Nullable Authentication authentication);
 
 	/**
 	 * Indicates whether the passed <code>Authentication</code> token represents a fully
@@ -66,7 +69,7 @@ public interface AuthenticationTrustResolver {
 	 * {@link #isRememberMe(Authentication)}, <code>false</code> otherwise
 	 * @since 6.1
 	 */
-	default boolean isFullyAuthenticated(Authentication authentication) {
+	default boolean isFullyAuthenticated(@Nullable Authentication authentication) {
 		return isAuthenticated(authentication) && !isRememberMe(authentication);
 	}
 
@@ -78,7 +81,8 @@ public interface AuthenticationTrustResolver {
 	 * {@link Authentication#isAuthenticated()} is true.
 	 * @since 6.1.7
 	 */
-	default boolean isAuthenticated(Authentication authentication) {
+	@Contract("null -> false")
+	default boolean isAuthenticated(@Nullable Authentication authentication) {
 		return authentication != null && authentication.isAuthenticated() && !isAnonymous(authentication);
 	}
 

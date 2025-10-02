@@ -22,13 +22,12 @@ import java.time.Instant;
 
 import reactor.core.publisher.Mono;
 
-import org.springframework.security.core.SpringSecurityCoreVersion;
 import org.springframework.util.Assert;
 
 public class ReactiveSessionInformation implements Serializable {
 
 	@Serial
-	private static final long serialVersionUID = SpringSecurityCoreVersion.SERIAL_VERSION_UID;
+	private static final long serialVersionUID = 620L;
 
 	private Instant lastAccessTime;
 

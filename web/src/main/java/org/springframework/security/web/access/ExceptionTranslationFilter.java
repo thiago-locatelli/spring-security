@@ -24,6 +24,7 @@ import jakarta.servlet.ServletRequest;
 import jakarta.servlet.ServletResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.jspecify.annotations.Nullable;
 
 import org.springframework.context.MessageSource;
 import org.springframework.context.MessageSourceAware;
@@ -169,7 +170,7 @@ public class ExceptionTranslationFilter extends GenericFilterBean implements Mes
 	}
 
 	private void handleSpringSecurityException(HttpServletRequest request, HttpServletResponse response,
-			FilterChain chain, RuntimeException exception) throws IOException, ServletException {
+			FilterChain chain, @Nullable RuntimeException exception) throws IOException, ServletException {
 		if (exception instanceof AuthenticationException) {
 			handleAuthenticationException(request, response, chain, (AuthenticationException) exception);
 		}
@@ -195,7 +196,8 @@ public class ExceptionTranslationFilter extends GenericFilterBean implements Mes
 			}
 			AuthenticationException ex = new InsufficientAuthenticationException(
 					this.messages.getMessage("ExceptionTranslationFilter.insufficientAuthentication",
-							"Full authentication is required to access this resource"));
+							"Full authentication is required to access this resource"),
+					exception);
 			ex.setAuthenticationRequest(authentication);
 			sendStartAuthentication(request, response, chain, ex);
 		}

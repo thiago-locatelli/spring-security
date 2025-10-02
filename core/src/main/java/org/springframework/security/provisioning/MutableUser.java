@@ -21,7 +21,6 @@ import java.util.Collection;
 import org.jspecify.annotations.Nullable;
 
 import org.springframework.security.core.GrantedAuthority;
-import org.springframework.security.core.SpringSecurityCoreVersion;
 import org.springframework.security.core.userdetails.UserDetails;
 
 /**
@@ -30,7 +29,7 @@ import org.springframework.security.core.userdetails.UserDetails;
  */
 class MutableUser implements MutableUserDetails {
 
-	private static final long serialVersionUID = SpringSecurityCoreVersion.SERIAL_VERSION_UID;
+	private static final long serialVersionUID = 620L;
 
 	private @Nullable String password;
 

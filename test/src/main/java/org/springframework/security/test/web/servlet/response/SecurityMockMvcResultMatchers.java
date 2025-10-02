@@ -17,8 +17,14 @@
 package org.springframework.security.test.web.servlet.response;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
+import java.util.List;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
+
+import org.jspecify.annotations.NullUnmarked;
+import org.jspecify.annotations.Nullable;
 
 import org.springframework.security.authentication.AuthenticationTrustResolver;
 import org.springframework.security.authentication.AuthenticationTrustResolverImpl;
@@ -33,6 +39,7 @@ import org.springframework.test.util.AssertionErrors;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.ResultMatcher;
+import org.springframework.util.Assert;
 
 /**
  * Security related {@link MockMvc} {@link ResultMatcher}s.
@@ -81,21 +88,26 @@ public final class SecurityMockMvcResultMatchers {
 	 */
 	public static final class AuthenticatedMatcher extends AuthenticationMatcher<AuthenticatedMatcher> {
 
-		private SecurityContext expectedContext;
+		private @Nullable SecurityContext expectedContext;
 
-		private Authentication expectedAuthentication;
+		private @Nullable Authentication expectedAuthentication;
 
-		private Object expectedAuthenticationPrincipal;
+		private @Nullable Object expectedAuthenticationPrincipal;
 
-		private String expectedAuthenticationName;
+		private @Nullable String expectedAuthenticationName;
 
-		private Collection<? extends GrantedAuthority> expectedGrantedAuthorities;
+		private @Nullable Collection<? extends GrantedAuthority> expectedGrantedAuthorities;
 
-		private Consumer<Authentication> assertAuthentication;
+		private @Nullable Collection<String> expectedAuthorities;
+
+		private Predicate<GrantedAuthority> ignoreAuthorities = (authority) -> false;
+
+		private @Nullable Consumer<Authentication> assertAuthentication;
 
 		AuthenticatedMatcher() {
 		}
 
+		@NullUnmarked
 		@Override
 		public void match(MvcResult result) {
 			SecurityContext context = load(result);
@@ -128,13 +140,28 @@ public final class SecurityMockMvcResultMatchers {
 			}
 			if (this.expectedGrantedAuthorities != null) {
 				AssertionErrors.assertTrue("Authentication cannot be null", auth != null);
-				Collection<? extends GrantedAuthority> authorities = auth.getAuthorities();
+				Collection<? extends GrantedAuthority> authorities = new ArrayList<>(auth.getAuthorities());
+				authorities.removeIf(this.ignoreAuthorities);
 				AssertionErrors.assertTrue(
 						authorities + " does not contain the same authorities as " + this.expectedGrantedAuthorities,
 						authorities.containsAll(this.expectedGrantedAuthorities));
 				AssertionErrors.assertTrue(
 						this.expectedGrantedAuthorities + " does not contain the same authorities as " + authorities,
 						this.expectedGrantedAuthorities.containsAll(authorities));
+			}
+			if (this.expectedAuthorities != null) {
+				AssertionErrors.assertTrue("Authentication cannot be null", auth != null);
+				List<String> authorities = auth.getAuthorities()
+					.stream()
+					.filter(Predicate.not(this.ignoreAuthorities))
+					.map(GrantedAuthority::getAuthority)
+					.toList();
+				AssertionErrors.assertTrue(
+						authorities + " does not contain the same authorities as " + this.expectedAuthorities,
+						this.expectedAuthorities.containsAll(authorities));
+				AssertionErrors.assertTrue(
+						this.expectedAuthorities + " does not contain the same authorities as " + authorities,
+						authorities.containsAll(this.expectedAuthorities));
 			}
 		}
 
@@ -198,6 +225,17 @@ public final class SecurityMockMvcResultMatchers {
 		}
 
 		/**
+		 * Specifies the {@link GrantedAuthority#getAuthority()}
+		 * @param authorities the authorityNames
+		 * @return the {@link AuthenticatedMatcher} for further customization
+		 */
+		public AuthenticatedMatcher withAuthorities(String... authorities) {
+			Assert.notNull(authorities, "authorities cannot be null");
+			this.expectedAuthorities = Arrays.asList(authorities);
+			return this;
+		}
+
+		/**
 		 * Specifies the {@link Authentication#getAuthorities()}
 		 * @param expected the {@link Authentication#getAuthorities()}
 		 * @return the {@link AuthenticatedMatcher} for further customization
@@ -208,16 +246,43 @@ public final class SecurityMockMvcResultMatchers {
 		}
 
 		/**
-		 * Specifies the {@link Authentication#getAuthorities()}
+		 * Specifies the expected roles.
+		 * <p>
+		 * Since a set of authorities can contain more than just roles, this method
+		 * differs from {@link #withAuthorities} in that it only verifies the authorities
+		 * prefixed by {@code ROLE_}. Other authorities are ignored.
+		 * <p>
+		 * If you want to validate more than just roles, please use
+		 * {@link #withAuthorities}.
 		 * @param roles the roles. Each value is automatically prefixed with "ROLE_"
 		 * @return the {@link AuthenticatedMatcher} for further customization
 		 */
 		public AuthenticatedMatcher withRoles(String... roles) {
-			Collection<GrantedAuthority> authorities = new ArrayList<>();
+			return withRoles("ROLE_", roles);
+		}
+
+		/**
+		 * Specifies the expected roles.
+		 * <p>
+		 * Since a set of authorities can contain more than just roles, this method
+		 * differs from {@link #withAuthorities} in that it only verifies the authorities
+		 * prefixed by {@code ROLE_}. Other authorities are ignored.
+		 * <p>
+		 * If you want to validate more than just roles, please use
+		 * {@link #withAuthorities}.
+		 * @param rolePrefix the role prefix
+		 * @param roles the roles. Each value is automatically prefixed with the
+		 * {@code rolePrefix}
+		 * @return the {@link AuthenticatedMatcher} for further customization
+		 * @since 7.0
+		 */
+		public AuthenticatedMatcher withRoles(String rolePrefix, String[] roles) {
+			List<GrantedAuthority> withPrefix = new ArrayList<>();
 			for (String role : roles) {
-				authorities.add(new SimpleGrantedAuthority("ROLE_" + role));
+				withPrefix.add(new SimpleGrantedAuthority(rolePrefix + role));
 			}
-			return withAuthorities(authorities);
+			this.ignoreAuthorities = (authority) -> !authority.getAuthority().startsWith(rolePrefix);
+			return withAuthorities(withPrefix);
 		}
 
 	}

@@ -60,9 +60,10 @@ dependencies {
 		api libs.org.hamcrest
 		api libs.org.hibernate.orm.hibernate.core
 		api libs.org.hsqldb
+		api libs.com.jayway.jsonpath.json.path
 		api libs.org.apereo.cas.client.cas.client.core
-		api libs.org.opensaml.opensaml.saml.api
-		api libs.org.opensaml.opensaml.saml.impl
+		api libs.org.opensaml.opensaml5.saml.api
+		api libs.org.opensaml.opensaml5.saml.impl
 		api libs.org.python.jython
 		api libs.org.seleniumhq.selenium.htmlunit.driver
 		api libs.org.seleniumhq.selenium.selenium.java
@@ -77,6 +78,6 @@ dependencies {
 		api libs.org.apache.maven.resolver.maven.resolver.transport.http
 		api libs.org.apache.maven.maven.resolver.provider
 		api libs.org.instancio.instancio.junit
+		api libs.com.password4j.password4j
 	}
 }
-

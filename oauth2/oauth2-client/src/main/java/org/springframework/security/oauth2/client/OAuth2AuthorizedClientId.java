@@ -19,7 +19,6 @@ package org.springframework.security.oauth2.client;
 import java.io.Serializable;
 import java.util.Objects;
 
-import org.springframework.security.core.SpringSecurityCoreVersion;
 import org.springframework.security.oauth2.client.registration.ClientRegistration;
 import org.springframework.util.Assert;
 
@@ -33,7 +32,7 @@ import org.springframework.util.Assert;
  */
 public final class OAuth2AuthorizedClientId implements Serializable {
 
-	private static final long serialVersionUID = SpringSecurityCoreVersion.SERIAL_VERSION_UID;
+	private static final long serialVersionUID = 620L;
 
 	private final String clientRegistrationId;
 

@@ -17,13 +17,18 @@
 package org.springframework.security.config.annotation.web.configurers;
 
 import java.util.LinkedHashMap;
+import java.util.function.Consumer;
+
+import org.jspecify.annotations.Nullable;
 
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.HttpSecurityBuilder;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.access.AccessDeniedHandler;
 import org.springframework.security.web.access.AccessDeniedHandlerImpl;
+import org.springframework.security.web.access.DelegatingMissingAuthorityAccessDeniedHandler;
 import org.springframework.security.web.access.ExceptionTranslationFilter;
 import org.springframework.security.web.access.RequestMatcherDelegatingAccessDeniedHandler;
 import org.springframework.security.web.authentication.DelegatingAuthenticationEntryPoint;
@@ -71,9 +76,11 @@ public final class ExceptionHandlingConfigurer<H extends HttpSecurityBuilder<H>>
 
 	private AccessDeniedHandler accessDeniedHandler;
 
-	private LinkedHashMap<RequestMatcher, AuthenticationEntryPoint> defaultEntryPointMappings = new LinkedHashMap<>();
+	private DelegatingAuthenticationEntryPoint.@Nullable Builder defaultEntryPoint;
 
 	private LinkedHashMap<RequestMatcher, AccessDeniedHandler> defaultDeniedHandlerMappings = new LinkedHashMap<>();
+
+	private DelegatingMissingAuthorityAccessDeniedHandler.@Nullable Builder missingAuthoritiesHandlerBuilder;
 
 	/**
 	 * Creates a new instance
@@ -126,6 +133,43 @@ public final class ExceptionHandlingConfigurer<H extends HttpSecurityBuilder<H>>
 	}
 
 	/**
+	 * Sets a default {@link AuthenticationEntryPoint} to be used which prefers being
+	 * invoked for the provided missing {@link GrantedAuthority}.
+	 * @param entryPoint the {@link AuthenticationEntryPoint} to use for the given
+	 * {@code authority}
+	 * @param authority the authority
+	 * @return the {@link ExceptionHandlingConfigurer} for further customizations
+	 * @since 7.0
+	 */
+	public ExceptionHandlingConfigurer<H> defaultDeniedHandlerForMissingAuthority(AuthenticationEntryPoint entryPoint,
+			String authority) {
+		if (this.missingAuthoritiesHandlerBuilder == null) {
+			this.missingAuthoritiesHandlerBuilder = DelegatingMissingAuthorityAccessDeniedHandler.builder();
+		}
+		this.missingAuthoritiesHandlerBuilder.addEntryPointFor(entryPoint, authority);
+		return this;
+	}
+
+	/**
+	 * Sets a default {@link AuthenticationEntryPoint} to be used which prefers being
+	 * invoked for the provided missing {@link GrantedAuthority}.
+	 * @param entryPoint a consumer of a
+	 * {@link DelegatingAuthenticationEntryPoint.Builder} to use for the given
+	 * {@code authority}
+	 * @param authority the authority
+	 * @return the {@link ExceptionHandlingConfigurer} for further customizations
+	 * @since 7.0
+	 */
+	public ExceptionHandlingConfigurer<H> defaultDeniedHandlerForMissingAuthority(
+			Consumer<DelegatingAuthenticationEntryPoint.Builder> entryPoint, String authority) {
+		if (this.missingAuthoritiesHandlerBuilder == null) {
+			this.missingAuthoritiesHandlerBuilder = DelegatingMissingAuthorityAccessDeniedHandler.builder();
+		}
+		this.missingAuthoritiesHandlerBuilder.addEntryPointFor(entryPoint, authority);
+		return this;
+	}
+
+	/**
 	 * Sets the {@link AuthenticationEntryPoint} to be used.
 	 *
 	 * <p>
@@ -161,7 +205,10 @@ public final class ExceptionHandlingConfigurer<H extends HttpSecurityBuilder<H>>
 	 */
 	public ExceptionHandlingConfigurer<H> defaultAuthenticationEntryPointFor(AuthenticationEntryPoint entryPoint,
 			RequestMatcher preferredMatcher) {
-		this.defaultEntryPointMappings.put(preferredMatcher, entryPoint);
+		if (this.defaultEntryPoint == null) {
+			this.defaultEntryPoint = DelegatingAuthenticationEntryPoint.builder();
+		}
+		this.defaultEntryPoint.addEntryPointFor(entryPoint, preferredMatcher);
 		return this;
 	}
 
@@ -224,6 +271,17 @@ public final class ExceptionHandlingConfigurer<H extends HttpSecurityBuilder<H>>
 	}
 
 	private AccessDeniedHandler createDefaultDeniedHandler(H http) {
+		AccessDeniedHandler defaults = createDefaultAccessDeniedHandler(http);
+		if (this.missingAuthoritiesHandlerBuilder == null) {
+			return defaults;
+		}
+		DelegatingMissingAuthorityAccessDeniedHandler deniedHandler = this.missingAuthoritiesHandlerBuilder.build();
+		deniedHandler.setRequestCache(getRequestCache(http));
+		deniedHandler.setDefaultAccessDeniedHandler(defaults);
+		return deniedHandler;
+	}
+
+	private AccessDeniedHandler createDefaultAccessDeniedHandler(H http) {
 		if (this.defaultDeniedHandlerMappings.isEmpty()) {
 			return new AccessDeniedHandlerImpl();
 		}
@@ -235,16 +293,10 @@ public final class ExceptionHandlingConfigurer<H extends HttpSecurityBuilder<H>>
 	}
 
 	private AuthenticationEntryPoint createDefaultEntryPoint(H http) {
-		if (this.defaultEntryPointMappings.isEmpty()) {
+		if (this.defaultEntryPoint == null) {
 			return new Http403ForbiddenEntryPoint();
 		}
-		if (this.defaultEntryPointMappings.size() == 1) {
-			return this.defaultEntryPointMappings.values().iterator().next();
-		}
-		DelegatingAuthenticationEntryPoint entryPoint = new DelegatingAuthenticationEntryPoint(
-				this.defaultEntryPointMappings);
-		entryPoint.setDefaultEntryPoint(this.defaultEntryPointMappings.values().iterator().next());
-		return entryPoint;
+		return this.defaultEntryPoint.build();
 	}
 
 	/**

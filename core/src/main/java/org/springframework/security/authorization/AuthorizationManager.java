@@ -31,7 +31,7 @@ import org.springframework.security.core.Authentication;
  * @author Evgeniy Cheban
  */
 @FunctionalInterface
-public interface AuthorizationManager<@Nullable T> {
+public interface AuthorizationManager<T extends @Nullable Object> {
 
 	/**
 	 * Determines if access should be granted for a specific authentication and object.
@@ -39,7 +39,7 @@ public interface AuthorizationManager<@Nullable T> {
 	 * @param object the {@link T} object to check
 	 * @throws AccessDeniedException if access is not granted
 	 */
-	default void verify(Supplier<Authentication> authentication, T object) {
+	default void verify(Supplier<? extends @Nullable Authentication> authentication, T object) {
 		AuthorizationResult result = authorize(authentication, object);
 		if (result != null && !result.isGranted()) {
 			throw new AuthorizationDeniedException("Access Denied", result);
@@ -54,6 +54,6 @@ public interface AuthorizationManager<@Nullable T> {
 	 * @return an {@link AuthorizationResult}
 	 * @since 6.4
 	 */
-	@Nullable AuthorizationResult authorize(Supplier<Authentication> authentication, T object);
+	@Nullable AuthorizationResult authorize(Supplier<? extends @Nullable Authentication> authentication, T object);
 
 }

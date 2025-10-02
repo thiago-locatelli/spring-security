@@ -26,8 +26,11 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.http.converter.HttpMessageConverter;
 import org.springframework.security.authentication.ProviderManager;
 import org.springframework.security.config.annotation.web.HttpSecurityBuilder;
+import org.springframework.security.core.GrantedAuthorities;
 import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.access.intercept.AuthorizationFilter;
+import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
 import org.springframework.security.web.authentication.ui.DefaultLoginPageGeneratingFilter;
 import org.springframework.security.web.authentication.ui.DefaultResourcesFilter;
 import org.springframework.security.web.authentication.www.BasicAuthenticationFilter;
@@ -151,7 +154,17 @@ public class WebAuthnConfigurer<H extends HttpSecurityBuilder<H>>
 	}
 
 	@Override
-	public void configure(H http) throws Exception {
+	public void init(H http) {
+		ExceptionHandlingConfigurer<H> exceptions = http.getConfigurer(ExceptionHandlingConfigurer.class);
+		if (exceptions != null) {
+			AuthenticationEntryPoint entryPoint = new LoginUrlAuthenticationEntryPoint("/login");
+			exceptions.defaultDeniedHandlerForMissingAuthority((ep) -> ep.defaultEntryPoint(entryPoint),
+					GrantedAuthorities.FACTOR_WEBAUTHN_AUTHORITY);
+		}
+	}
+
+	@Override
+	public void configure(H http) {
 		UserDetailsService userDetailsService = getSharedOrBean(http, UserDetailsService.class)
 			.orElseThrow(() -> new IllegalStateException("Missing UserDetailsService Bean"));
 		PublicKeyCredentialUserEntityRepository userEntities = getSharedOrBean(http,

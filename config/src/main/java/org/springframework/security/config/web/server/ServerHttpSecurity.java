@@ -1316,6 +1316,10 @@ public class ServerHttpSecurity {
 		return this.context.getBeanNamesForType(beanClass);
 	}
 
+	ApplicationContext getApplicationContext() {
+		return this.context;
+	}
+
 	protected void setApplicationContext(ApplicationContext applicationContext) throws BeansException {
 		this.context = applicationContext;
 	}
@@ -3029,7 +3033,8 @@ public class ServerHttpSecurity {
 
 		/**
 		 * Configures the logout handler. Default is
-		 * {@code SecurityContextServerLogoutHandler}
+		 * {@code SecurityContextServerLogoutHandler}. This clears any previous handlers
+		 * configured.
 		 * @param logoutHandler
 		 * @return the {@link LogoutSpec} to configure
 		 */
@@ -3042,6 +3047,18 @@ public class ServerHttpSecurity {
 		private LogoutSpec addLogoutHandler(ServerLogoutHandler logoutHandler) {
 			Assert.notNull(logoutHandler, "logoutHandler cannot be null");
 			this.logoutHandlers.add(logoutHandler);
+			return this;
+		}
+
+		/**
+		 * Allows managing the list of {@link ServerLogoutHandler} instances.
+		 * @param handlersConsumer {@link Consumer} for managing the list of handlers.
+		 * @return the {@link LogoutSpec} to configure
+		 * @since 7.0
+		 */
+		public LogoutSpec logoutHandler(Consumer<List<ServerLogoutHandler>> handlersConsumer) {
+			Assert.notNull(handlersConsumer, "consumer cannot be null");
+			handlersConsumer.accept(this.logoutHandlers);
 			return this;
 		}
 
@@ -3214,6 +3231,8 @@ public class ServerHttpSecurity {
 
 		private ReactiveAuthenticationManager authenticationManager;
 
+		private ServerAuthenticationConverter serverAuthenticationConverter;
+
 		private X509Spec() {
 		}
 
@@ -3227,11 +3246,17 @@ public class ServerHttpSecurity {
 			return this;
 		}
 
+		public X509Spec serverAuthenticationConverter(ServerAuthenticationConverter serverAuthenticationConverter) {
+			this.serverAuthenticationConverter = serverAuthenticationConverter;
+			return this;
+		}
+
 		protected void configure(ServerHttpSecurity http) {
 			ReactiveAuthenticationManager authenticationManager = getAuthenticationManager();
 			X509PrincipalExtractor principalExtractor = getPrincipalExtractor();
+			ServerAuthenticationConverter converter = getServerAuthenticationConverter(principalExtractor);
 			AuthenticationWebFilter filter = new AuthenticationWebFilter(authenticationManager);
-			filter.setServerAuthenticationConverter(new ServerX509AuthenticationConverter(principalExtractor));
+			filter.setServerAuthenticationConverter(converter);
 			http.addFilterAt(filter, SecurityWebFiltersOrder.AUTHENTICATION);
 		}
 
@@ -3248,6 +3273,13 @@ public class ServerHttpSecurity {
 			}
 			ReactiveUserDetailsService userDetailsService = getBean(ReactiveUserDetailsService.class);
 			return new ReactivePreAuthenticatedAuthenticationManager(userDetailsService);
+		}
+
+		private ServerAuthenticationConverter getServerAuthenticationConverter(X509PrincipalExtractor extractor) {
+			if (this.serverAuthenticationConverter != null) {
+				return this.serverAuthenticationConverter;
+			}
+			return new ServerX509AuthenticationConverter(extractor);
 		}
 
 	}

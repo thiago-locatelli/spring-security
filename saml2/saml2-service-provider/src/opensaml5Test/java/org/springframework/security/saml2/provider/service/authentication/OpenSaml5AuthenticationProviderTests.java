@@ -71,7 +71,9 @@ import org.opensaml.xmlsec.encryption.impl.EncryptedDataBuilder;
 import org.opensaml.xmlsec.signature.support.SignatureConstants;
 
 import org.springframework.core.convert.converter.Converter;
+import org.springframework.security.authentication.SecurityAssertions;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthorities;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.AuthorityUtils;
 import org.springframework.security.jackson2.SecurityJackson2Modules;
@@ -734,7 +736,7 @@ public class OpenSaml5AuthenticationProviderTests {
 		Response response = TestOpenSamlObjects.signedResponseWithOneAssertion();
 		Saml2AuthenticationToken token = token(response, verifying(registration()));
 		Authentication authentication = provider.authenticate(token);
-		assertThat(AuthorityUtils.authorityListToSet(authentication.getAuthorities())).containsExactly("CUSTOM");
+		SecurityAssertions.assertThat(authentication).hasAuthority("CUSTOM");
 		verify(grantedAuthoritiesConverter).convert(any());
 	}
 
@@ -982,6 +984,14 @@ public class OpenSaml5AuthenticationProviderTests {
 		Response response = TestOpenSamlObjects.signedResponseWithOneAssertion((r) -> r.setIssuer(null));
 		Saml2AuthenticationToken token = token(response, verifying(registration()));
 		assertThatExceptionOfType(Saml2AuthenticationException.class).isThrownBy(() -> provider.authenticate(token));
+	}
+
+	@Test
+	public void authenticateWhenSuccessThenIssuesFactor() {
+		Response response = TestOpenSamlObjects.signedResponseWithOneAssertion();
+		Authentication request = token(response, verifying(registration()));
+		Authentication result = this.provider.authenticate(request);
+		SecurityAssertions.assertThat(result).hasAuthority(GrantedAuthorities.FACTOR_SAML_RESPONSE_AUTHORITY);
 	}
 
 	private <T extends XMLObject> T build(QName qName) {

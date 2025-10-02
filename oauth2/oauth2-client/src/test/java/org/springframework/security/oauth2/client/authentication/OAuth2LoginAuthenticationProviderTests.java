@@ -29,6 +29,9 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.stubbing.Answer;
 
+import org.springframework.security.authentication.SecurityAssertions;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthorities;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.AuthorityUtils;
 import org.springframework.security.core.authority.mapping.GrantedAuthoritiesMapper;
@@ -48,6 +51,7 @@ import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationResp
 import org.springframework.security.oauth2.core.endpoint.TestOAuth2AuthorizationRequests;
 import org.springframework.security.oauth2.core.endpoint.TestOAuth2AuthorizationResponses;
 import org.springframework.security.oauth2.core.user.OAuth2User;
+import org.springframework.security.oauth2.core.user.TestOAuth2Users;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
@@ -56,6 +60,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 
 /**
  * Tests for {@link OAuth2LoginAuthenticationProvider}.
@@ -165,7 +170,7 @@ public class OAuth2LoginAuthenticationProviderTests {
 		assertThat(authentication.isAuthenticated()).isTrue();
 		assertThat(authentication.getPrincipal()).isEqualTo(principal);
 		assertThat(authentication.getCredentials()).isEqualTo("");
-		assertThat(authentication.getAuthorities()).isEqualTo(authorities);
+		assertThat(authentication.getAuthorities()).containsAll(authorities);
 		assertThat(authentication.getClientRegistration()).isEqualTo(this.clientRegistration);
 		assertThat(authentication.getAuthorizationExchange()).isEqualTo(this.authorizationExchange);
 		assertThat(authentication.getAccessToken()).isEqualTo(accessTokenResponse.getAccessToken());
@@ -187,7 +192,8 @@ public class OAuth2LoginAuthenticationProviderTests {
 		this.authenticationProvider.setAuthoritiesMapper(authoritiesMapper);
 		OAuth2LoginAuthenticationToken authentication = (OAuth2LoginAuthenticationToken) this.authenticationProvider
 			.authenticate(new OAuth2LoginAuthenticationToken(this.clientRegistration, this.authorizationExchange));
-		assertThat(authentication.getAuthorities()).isEqualTo(mappedAuthorities);
+		verify(authoritiesMapper).mapAuthorities(any());
+		SecurityAssertions.assertThat(authentication).authorities().containsAll(mappedAuthorities);
 	}
 
 	// gh-5368
@@ -204,6 +210,17 @@ public class OAuth2LoginAuthenticationProviderTests {
 			.authenticate(new OAuth2LoginAuthenticationToken(this.clientRegistration, this.authorizationExchange));
 		assertThat(userRequestArgCaptor.getValue().getAdditionalParameters())
 			.containsAllEntriesOf(accessTokenResponse.getAdditionalParameters());
+	}
+
+	@Test
+	public void authenticateWhenLoginSuccessThenIssuesFactor() {
+		OAuth2AccessTokenResponse accessTokenResponse = accessTokenSuccessResponse();
+		given(this.accessTokenResponseClient.getTokenResponse(any())).willReturn(accessTokenResponse);
+		given(this.userService.loadUser(any())).willReturn(TestOAuth2Users.create());
+		Authentication request = new OAuth2LoginAuthenticationToken(this.clientRegistration,
+				this.authorizationExchange);
+		Authentication result = this.authenticationProvider.authenticate(request);
+		SecurityAssertions.assertThat(result).hasAuthority(GrantedAuthorities.FACTOR_AUTHORIZATION_CODE_AUTHORITY);
 	}
 
 	private OAuth2AccessTokenResponse accessTokenSuccessResponse() {

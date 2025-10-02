@@ -33,25 +33,23 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractAuthenticationFilterConfigurer;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.annotation.web.configurers.CsrfConfigurer;
+import org.springframework.security.config.annotation.web.configurers.ExceptionHandlingConfigurer;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthorities;
 import org.springframework.security.saml2.provider.service.authentication.AbstractSaml2AuthenticationRequest;
-import org.springframework.security.saml2.provider.service.authentication.OpenSaml4AuthenticationProvider;
 import org.springframework.security.saml2.provider.service.authentication.OpenSaml5AuthenticationProvider;
 import org.springframework.security.saml2.provider.service.registration.RelyingPartyRegistration;
 import org.springframework.security.saml2.provider.service.registration.RelyingPartyRegistrationRepository;
 import org.springframework.security.saml2.provider.service.registration.RelyingPartyRegistrations;
 import org.springframework.security.saml2.provider.service.web.HttpSessionSaml2AuthenticationRequestRepository;
-import org.springframework.security.saml2.provider.service.web.OpenSaml4AuthenticationTokenConverter;
 import org.springframework.security.saml2.provider.service.web.OpenSaml5AuthenticationTokenConverter;
 import org.springframework.security.saml2.provider.service.web.Saml2AuthenticationRequestRepository;
 import org.springframework.security.saml2.provider.service.web.Saml2AuthenticationTokenConverter;
 import org.springframework.security.saml2.provider.service.web.Saml2WebSsoAuthenticationRequestFilter;
-import org.springframework.security.saml2.provider.service.web.authentication.OpenSaml4AuthenticationRequestResolver;
 import org.springframework.security.saml2.provider.service.web.authentication.OpenSaml5AuthenticationRequestResolver;
 import org.springframework.security.saml2.provider.service.web.authentication.Saml2AuthenticationRequestResolver;
 import org.springframework.security.saml2.provider.service.web.authentication.Saml2WebSsoAuthenticationFilter;
 import org.springframework.security.web.AuthenticationEntryPoint;
-import org.springframework.security.web.PortResolver;
 import org.springframework.security.web.authentication.AuthenticationConverter;
 import org.springframework.security.web.authentication.DelegatingAuthenticationEntryPoint;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
@@ -275,7 +273,7 @@ public final class Saml2LoginConfigurer<B extends HttpSecurityBuilder<B>>
 	 * </ul>
 	 */
 	@Override
-	public void init(B http) throws Exception {
+	public void init(B http) {
 		registerDefaultCsrfOverride(http);
 		relyingPartyRegistrationRepository(http);
 		this.saml2WebSsoAuthenticationFilter = new Saml2WebSsoAuthenticationFilter(getAuthenticationConverter(http));
@@ -318,7 +316,7 @@ public final class Saml2LoginConfigurer<B extends HttpSecurityBuilder<B>>
 	 * AuthNRequest redirects
 	 */
 	@Override
-	public void configure(B http) throws Exception {
+	public void configure(B http) {
 		Saml2WebSsoAuthenticationRequestFilter filter = getAuthenticationRequestFilter(http);
 		filter.setAuthenticationRequestRepository(getAuthenticationRequestRepository(http));
 		http.addFilter(postProcess(filter));
@@ -343,16 +341,22 @@ public final class Saml2LoginConfigurer<B extends HttpSecurityBuilder<B>>
 				new OrRequestMatcher(loginPageMatcher, faviconMatcher), defaultEntryPointMatcher);
 		RequestMatcher notXRequestedWith = new NegatedRequestMatcher(
 				new RequestHeaderRequestMatcher("X-Requested-With", "XMLHttpRequest"));
-		LinkedHashMap<RequestMatcher, AuthenticationEntryPoint> entryPoints = new LinkedHashMap<>();
 		LoginUrlAuthenticationEntryPoint loginUrlEntryPoint = new LoginUrlAuthenticationEntryPoint(providerLoginPage);
-		PortResolver portResolver = getBeanOrNull(http, PortResolver.class);
-		if (portResolver != null) {
-			loginUrlEntryPoint.setPortResolver(portResolver);
+		RequestMatcher loginUrlMatcher = new AndRequestMatcher(notXRequestedWith,
+				new NegatedRequestMatcher(defaultLoginPageMatcher));
+		// @formatter:off
+		AuthenticationEntryPoint loginEntryPoint = DelegatingAuthenticationEntryPoint.builder()
+				.addEntryPointFor(loginUrlEntryPoint, loginUrlMatcher)
+				.defaultEntryPoint(getAuthenticationEntryPoint())
+				.build();
+		// @formatter:on
+		ExceptionHandlingConfigurer<B> exceptions = http.getConfigurer(ExceptionHandlingConfigurer.class);
+		if (exceptions != null) {
+			RequestMatcher requestMatcher = getAuthenticationEntryPointMatcher(http);
+			exceptions.defaultDeniedHandlerForMissingAuthority(
+					(ep) -> ep.addEntryPointFor(loginEntryPoint, requestMatcher),
+					GrantedAuthorities.FACTOR_SAML_RESPONSE_AUTHORITY);
 		}
-		entryPoints.put(new AndRequestMatcher(notXRequestedWith, new NegatedRequestMatcher(defaultLoginPageMatcher)),
-				loginUrlEntryPoint);
-		DelegatingAuthenticationEntryPoint loginEntryPoint = new DelegatingAuthenticationEntryPoint(entryPoints);
-		loginEntryPoint.setDefaultEntryPoint(this.getAuthenticationEntryPoint());
 		return loginEntryPoint;
 	}
 
@@ -381,10 +385,8 @@ public final class Saml2LoginConfigurer<B extends HttpSecurityBuilder<B>>
 			return openSamlAuthenticationRequestResolver;
 		}
 		else {
-			OpenSaml4AuthenticationRequestResolver openSamlAuthenticationRequestResolver = new OpenSaml4AuthenticationRequestResolver(
-					relyingPartyRegistrationRepository(http));
-			openSamlAuthenticationRequestResolver.setRequestMatcher(getAuthenticationRequestMatcher());
-			return openSamlAuthenticationRequestResolver;
+			throw new IllegalArgumentException(
+					"Spring Security does not support OpenSAML " + Version.getVersion() + ". Please use OpenSAML 5");
 		}
 	}
 
@@ -429,15 +431,8 @@ public final class Saml2LoginConfigurer<B extends HttpSecurityBuilder<B>>
 			converter.setRequestMatcher(getLoginProcessingEndpoint());
 			return converter;
 		}
-		authenticationConverterBean = getBeanOrNull(http, OpenSaml4AuthenticationTokenConverter.class);
-		if (authenticationConverterBean != null) {
-			return authenticationConverterBean;
-		}
-		OpenSaml4AuthenticationTokenConverter converter = new OpenSaml4AuthenticationTokenConverter(
-				this.relyingPartyRegistrationRepository);
-		converter.setAuthenticationRequestRepository(getAuthenticationRequestRepository(http));
-		converter.setRequestMatcher(getLoginProcessingEndpoint());
-		return converter;
+		throw new IllegalArgumentException(
+				"Spring Security does not support OpenSAML " + Version.getVersion() + ". Please use OpenSAML 5");
 	}
 
 	private void registerDefaultAuthenticationProvider(B http) {
@@ -448,10 +443,8 @@ public final class Saml2LoginConfigurer<B extends HttpSecurityBuilder<B>>
 			}
 		}
 		else {
-			OpenSaml4AuthenticationProvider provider = getBeanOrNull(http, OpenSaml4AuthenticationProvider.class);
-			if (provider == null) {
-				http.authenticationProvider(postProcess(new OpenSaml4AuthenticationProvider()));
-			}
+			throw new IllegalArgumentException(
+					"Spring Security does not support OpenSAML " + Version.getVersion() + ". Please use OpenSAML 5");
 		}
 	}
 

@@ -78,13 +78,14 @@ public final class PreAuthorizeAuthorizationManager
 	 * {@link PreAuthorize} annotation is not present
 	 */
 	@Override
-	public @Nullable AuthorizationResult authorize(Supplier<Authentication> authentication, MethodInvocation mi) {
+	public @Nullable AuthorizationResult authorize(Supplier<? extends @Nullable Authentication> authentication,
+			MethodInvocation mi) {
 		ExpressionAttribute attribute = this.registry.getAttribute(mi);
 		if (attribute == null) {
 			return null;
 		}
 		EvaluationContext ctx = this.registry.getExpressionHandler().createEvaluationContext(authentication, mi);
-		return ExpressionUtils.evaluate(attribute.getExpression(), ctx);
+		return ExpressionUtils.evaluate(attribute.getExpression(), ctx, authentication, mi);
 	}
 
 	@Override

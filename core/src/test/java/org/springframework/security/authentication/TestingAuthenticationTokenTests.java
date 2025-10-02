@@ -17,12 +17,17 @@
 package org.springframework.security.authentication;
 
 import java.util.Arrays;
+import java.util.Set;
 
 import org.junit.jupiter.api.Test;
 
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.AuthorityUtils;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 
 /**
  * @author Josh Cummings
@@ -47,6 +52,39 @@ public class TestingAuthenticationTokenTests {
 		TestingAuthenticationToken authenticated = new TestingAuthenticationToken("principal", "credentials",
 				Arrays.asList(new SimpleGrantedAuthority("authority")));
 		assertThat(authenticated.isAuthenticated()).isTrue();
+	}
+
+	@Test
+	public void toBuilderWhenApplyThenCopies() {
+		TestingAuthenticationToken factorOne = new TestingAuthenticationToken("alice", "pass",
+				AuthorityUtils.createAuthorityList("FACTOR_ONE"));
+		TestingAuthenticationToken factorTwo = new TestingAuthenticationToken("bob", "ssap",
+				AuthorityUtils.createAuthorityList("FACTOR_TWO"));
+		TestingAuthenticationToken result = factorOne.toBuilder()
+			.authorities((a) -> a.addAll(factorTwo.getAuthorities()))
+			.principal(factorTwo.getPrincipal())
+			.credentials(factorTwo.getCredentials())
+			.build();
+		Set<String> authorities = AuthorityUtils.authorityListToSet(result.getAuthorities());
+		assertThat(result.getPrincipal()).isSameAs(factorTwo.getPrincipal());
+		assertThat(result.getCredentials()).isSameAs(factorTwo.getCredentials());
+		assertThat(authorities).containsExactlyInAnyOrder("FACTOR_ONE", "FACTOR_TWO");
+	}
+
+	@Test
+	void constructorObjectObjectStringVargsWhenNullAuthorities() {
+		String[] authorities = null;
+		assertThatIllegalArgumentException()
+			.isThrownBy(() -> new TestingAuthenticationToken("user", "password", authorities));
+	}
+
+	@Test
+	void constructorObjectObjectStringVargsWhenValid() {
+		Authentication auth = new TestingAuthenticationToken("user", "password", "ROLE_USER");
+		assertThat(auth.isAuthenticated()).isTrue();
+		assertThat(auth.getPrincipal()).isEqualTo("user");
+		assertThat(auth.getCredentials()).isEqualTo("password");
+		assertThat(auth.getAuthorities()).extracting(GrantedAuthority::getAuthority).containsOnly("ROLE_USER");
 	}
 
 }

@@ -19,6 +19,8 @@ package org.springframework.security.web.webauthn.api;
 import java.time.Instant;
 import java.util.Set;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * An immutable {@link CredentialRecord}.
  *
@@ -27,7 +29,7 @@ import java.util.Set;
  */
 public final class ImmutableCredentialRecord implements CredentialRecord {
 
-	private final PublicKeyCredentialType credentialType;
+	private final @Nullable PublicKeyCredentialType credentialType;
 
 	private final Bytes credentialId;
 
@@ -45,9 +47,9 @@ public final class ImmutableCredentialRecord implements CredentialRecord {
 
 	private final boolean backupState;
 
-	private final Bytes attestationObject;
+	private final @Nullable Bytes attestationObject;
 
-	private final Bytes attestationClientDataJSON;
+	private final @Nullable Bytes attestationClientDataJSON;
 
 	private final Instant created;
 
@@ -55,10 +57,11 @@ public final class ImmutableCredentialRecord implements CredentialRecord {
 
 	private final String label;
 
-	private ImmutableCredentialRecord(PublicKeyCredentialType credentialType, Bytes credentialId,
+	private ImmutableCredentialRecord(@Nullable PublicKeyCredentialType credentialType, Bytes credentialId,
 			Bytes userEntityUserId, PublicKeyCose publicKey, long signatureCount, boolean uvInitialized,
 			Set<AuthenticatorTransport> transports, boolean backupEligible, boolean backupState,
-			Bytes attestationObject, Bytes attestationClientDataJSON, Instant created, Instant lastUsed, String label) {
+			@Nullable Bytes attestationObject, @Nullable Bytes attestationClientDataJSON, Instant created,
+			Instant lastUsed, String label) {
 		this.credentialType = credentialType;
 		this.credentialId = credentialId;
 		this.userEntityUserId = userEntityUserId;
@@ -76,7 +79,7 @@ public final class ImmutableCredentialRecord implements CredentialRecord {
 	}
 
 	@Override
-	public PublicKeyCredentialType getCredentialType() {
+	public @Nullable PublicKeyCredentialType getCredentialType() {
 		return this.credentialType;
 	}
 
@@ -121,12 +124,12 @@ public final class ImmutableCredentialRecord implements CredentialRecord {
 	}
 
 	@Override
-	public Bytes getAttestationObject() {
+	public @Nullable Bytes getAttestationObject() {
 		return this.attestationObject;
 	}
 
 	@Override
-	public Bytes getAttestationClientDataJSON() {
+	public @Nullable Bytes getAttestationClientDataJSON() {
 		return this.attestationClientDataJSON;
 	}
 
@@ -155,32 +158,37 @@ public final class ImmutableCredentialRecord implements CredentialRecord {
 
 	public static final class ImmutableCredentialRecordBuilder {
 
-		private PublicKeyCredentialType credentialType;
+		private @Nullable PublicKeyCredentialType credentialType;
 
+		@SuppressWarnings("NullAway.Init")
 		private Bytes credentialId;
 
+		@SuppressWarnings("NullAway.Init")
 		private Bytes userEntityUserId;
 
+		@SuppressWarnings("NullAway.Init")
 		private PublicKeyCose publicKey;
 
 		private long signatureCount;
 
 		private boolean uvInitialized;
 
+		@SuppressWarnings("NullAway.Init")
 		private Set<AuthenticatorTransport> transports;
 
 		private boolean backupEligible;
 
 		private boolean backupState;
 
-		private Bytes attestationObject;
+		private @Nullable Bytes attestationObject;
 
-		private Bytes attestationClientDataJSON;
+		private @Nullable Bytes attestationClientDataJSON;
 
 		private Instant created = Instant.now();
 
 		private Instant lastUsed = this.created;
 
+		@SuppressWarnings("NullAway.Init")
 		private String label;
 
 		private ImmutableCredentialRecordBuilder() {
@@ -203,7 +211,7 @@ public final class ImmutableCredentialRecord implements CredentialRecord {
 			this.label = other.getLabel();
 		}
 
-		public ImmutableCredentialRecordBuilder credentialType(PublicKeyCredentialType credentialType) {
+		public ImmutableCredentialRecordBuilder credentialType(@Nullable PublicKeyCredentialType credentialType) {
 			this.credentialType = credentialType;
 			return this;
 		}
@@ -248,12 +256,12 @@ public final class ImmutableCredentialRecord implements CredentialRecord {
 			return this;
 		}
 
-		public ImmutableCredentialRecordBuilder attestationObject(Bytes attestationObject) {
+		public ImmutableCredentialRecordBuilder attestationObject(@Nullable Bytes attestationObject) {
 			this.attestationObject = attestationObject;
 			return this;
 		}
 
-		public ImmutableCredentialRecordBuilder attestationClientDataJSON(Bytes attestationClientDataJSON) {
+		public ImmutableCredentialRecordBuilder attestationClientDataJSON(@Nullable Bytes attestationClientDataJSON) {
 			this.attestationClientDataJSON = attestationClientDataJSON;
 			return this;
 		}

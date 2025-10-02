@@ -44,7 +44,9 @@ import org.springframework.security.authentication.jaas.event.JaasAuthentication
 import org.springframework.security.authentication.jaas.event.JaasAuthenticationSuccessEvent;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
+import org.springframework.security.core.GrantedAuthorities;
 import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.session.SessionDestroyedEvent;
 import org.springframework.util.Assert;
@@ -120,6 +122,8 @@ import org.springframework.util.ObjectUtils;
 public abstract class AbstractJaasAuthenticationProvider implements AuthenticationProvider,
 		ApplicationEventPublisherAware, InitializingBean, ApplicationListener<SessionDestroyedEvent> {
 
+	private static final String AUTHORITY = GrantedAuthorities.FACTOR_PASSWORD_AUTHORITY;
+
 	private ApplicationEventPublisher applicationEventPublisher = (event) -> {
 	};
 
@@ -178,8 +182,10 @@ public abstract class AbstractJaasAuthenticationProvider implements Authenticati
 			// applied.
 			authorities = getAuthorities(principals);
 			// Convert the authorities set back to an array and apply it to the token.
-			JaasAuthenticationToken result = new JaasAuthenticationToken(request.getPrincipal(),
-					request.getCredentials(), new ArrayList<>(authorities), loginContext);
+			Object principal = request.getPrincipal();
+			Assert.notNull(principal, "The principal cannot be null");
+			JaasAuthenticationToken result = new JaasAuthenticationToken(principal, request.getCredentials(),
+					new ArrayList<>(authorities), loginContext);
 			// Publish the success event
 			publishSuccessEvent(result);
 			// we're done, return the token.
@@ -208,6 +214,7 @@ public abstract class AbstractJaasAuthenticationProvider implements Authenticati
 				}
 			}
 		}
+		authorities.add(new SimpleGrantedAuthority(AUTHORITY));
 		return authorities;
 	}
 

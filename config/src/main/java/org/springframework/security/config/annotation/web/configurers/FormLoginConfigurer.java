@@ -21,6 +21,7 @@ import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.HttpSecurityBuilder;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.core.GrantedAuthorities;
 import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.authentication.ForwardAuthenticationFailureHandler;
 import org.springframework.security.web.authentication.ForwardAuthenticationSuccessHandler;
@@ -228,9 +229,16 @@ public final class FormLoginConfigurer<H extends HttpSecurityBuilder<H>> extends
 	}
 
 	@Override
-	public void init(H http) throws Exception {
+	public void init(H http) {
 		super.init(http);
 		initDefaultLoginFilter(http);
+		ExceptionHandlingConfigurer<H> exceptions = http.getConfigurer(ExceptionHandlingConfigurer.class);
+		if (exceptions != null) {
+			AuthenticationEntryPoint entryPoint = getAuthenticationEntryPoint();
+			RequestMatcher requestMatcher = getAuthenticationEntryPointMatcher(http);
+			exceptions.defaultDeniedHandlerForMissingAuthority((ep) -> ep.addEntryPointFor(entryPoint, requestMatcher),
+					GrantedAuthorities.FACTOR_PASSWORD_AUTHORITY);
+		}
 	}
 
 	@Override

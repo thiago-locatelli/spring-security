@@ -37,6 +37,8 @@ import jakarta.servlet.ServletResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.jspecify.annotations.NullUnmarked;
+import org.jspecify.annotations.Nullable;
 
 import org.springframework.core.log.LogMessage;
 import org.springframework.util.StringUtils;
@@ -46,13 +48,15 @@ import org.springframework.util.StringUtils;
  * wraps the chain in before and after observations
  *
  * @author Josh Cummings
+ * @author Nikita Konev
  * @since 6.0
  */
+@NullUnmarked // https://github.com/spring-projects/spring-security/issues/17815
 public final class ObservationFilterChainDecorator implements FilterChainProxy.FilterChainDecorator {
 
 	private static final Log logger = LogFactory.getLog(FilterChainProxy.class);
 
-	private static final String ATTRIBUTE = ObservationFilterChainDecorator.class + ".observation";
+	static final String ATTRIBUTE = ObservationFilterChainDecorator.class + ".observation";
 
 	static final String UNSECURED_OBSERVATION_NAME = "spring.security.http.unsecured.requests";
 
@@ -250,6 +254,16 @@ public final class ObservationFilterChainDecorator implements FilterChainProxy.F
 		private AroundFilterObservation parent(HttpServletRequest request) {
 			FilterChainObservationContext beforeContext = FilterChainObservationContext.before();
 			FilterChainObservationContext afterContext = FilterChainObservationContext.after();
+
+			AroundFilterObservation existingParentObservation = (AroundFilterObservation) request
+				.getAttribute(ATTRIBUTE);
+			if (existingParentObservation != null) {
+				beforeContext
+					.setParentObservation(existingParentObservation.before().getContext().getParentObservation());
+				afterContext
+					.setParentObservation(existingParentObservation.after().getContext().getParentObservation());
+			}
+
 			Observation before = Observation.createNotStarted(this.convention, () -> beforeContext, this.registry);
 			Observation after = Observation.createNotStarted(this.convention, () -> afterContext, this.registry);
 			AroundFilterObservation parent = AroundFilterObservation.create(before, after);
@@ -496,7 +510,7 @@ public final class ObservationFilterChainDecorator implements FilterChainProxy.F
 
 		private final String filterSection;
 
-		private String filterName;
+		private @Nullable String filterName;
 
 		private int chainPosition;
 
@@ -519,7 +533,7 @@ public final class ObservationFilterChainDecorator implements FilterChainProxy.F
 			return this.filterSection;
 		}
 
-		String getFilterName() {
+		@Nullable String getFilterName() {
 			return this.filterName;
 		}
 

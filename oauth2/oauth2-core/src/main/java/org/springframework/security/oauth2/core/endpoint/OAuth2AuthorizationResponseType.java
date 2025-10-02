@@ -18,7 +18,6 @@ package org.springframework.security.oauth2.core.endpoint;
 
 import java.io.Serializable;
 
-import org.springframework.security.core.SpringSecurityCoreVersion;
 import org.springframework.util.Assert;
 
 /**
@@ -37,7 +36,7 @@ import org.springframework.util.Assert;
  */
 public final class OAuth2AuthorizationResponseType implements Serializable {
 
-	private static final long serialVersionUID = SpringSecurityCoreVersion.SERIAL_VERSION_UID;
+	private static final long serialVersionUID = 620L;
 
 	public static final OAuth2AuthorizationResponseType CODE = new OAuth2AuthorizationResponseType("code");
 

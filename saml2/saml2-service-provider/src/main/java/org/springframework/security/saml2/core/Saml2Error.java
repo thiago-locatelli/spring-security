@@ -18,7 +18,6 @@ package org.springframework.security.saml2.core;
 
 import java.io.Serializable;
 
-import org.springframework.security.core.SpringSecurityCoreVersion;
 import org.springframework.util.Assert;
 
 /**
@@ -34,7 +33,7 @@ import org.springframework.util.Assert;
  */
 public class Saml2Error implements Serializable {
 
-	private static final long serialVersionUID = SpringSecurityCoreVersion.SERIAL_VERSION_UID;
+	private static final long serialVersionUID = 620L;
 
 	private final String errorCode;
 

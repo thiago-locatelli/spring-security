@@ -9,12 +9,22 @@ Below are the highlights of the release, or you can view https://github.com/spri
 Being a major release, there are a number of deprecated APIs that are removed in Spring Security 7.
 Each section that follows will indicate the more notable removals as well as the new features in that module
 
+== Modules
+
+* The https://github.com/spring-projects/spring-security-kerberos[Spring Security Kerberos Extension] is now part of Spring Security. See the xref:servlet/authentication/kerberos/index.adoc[Kerberos] section of the reference for details.
+
 == Core
 
+* Added Support for xref:servlet/authentication/adaptive.adoc[Multi-factor Authentication]
 * Removed `AuthorizationManager#check` in favor of `AuthorizationManager#authorize`
+* Added javadoc:org.springframework.security.authorization.AllAuthoritiesAuthorizationManager[] and javadoc:org.springframework.security.authorization.AllAuthoritiesReactiveAuthorizationManager[] along with corresponding methods for xref:servlet/authorization/authorize-http-requests.adoc#authorize-requests[Authorizing `HttpServletRequests`] and xref:servlet/authorization/method-security.adoc#using-authorization-expression-fields-and-methods[method security expressions].
+* Added xref:servlet/authorization/architecture.adoc#authz-authorization-manager-factory[`AuthorizationManagerFactory`] for creating `AuthorizationManager` instances in xref:servlet/authorization/authorize-http-requests.adoc#customizing-authorization-managers[request-based] and xref:servlet/authorization/method-security.adoc#customizing-authorization-managers[method-based] authorization components
+* Added `Authentication.Builder` for mutating and merging `Authentication` instances
+* Moved Access API (`AccessDecisionManager`, `AccessDecisionVoter`, etc.) to a new module, `spring-security-access`
 
 == Config
 
+* Support modular configuration in xref::servlet/configuration/java.adoc#modular-httpsecurity-configuration[Servlets] and xref::reactive/configuration/webflux.adoc#modular-serverhttpsecurity-configuration[WebFlux]
 * Removed `and()` from the `HttpSecurity` DSL in favor of using the lambda methods
 * Removed `authorizeRequests` in favor of `authorizeHttpRequests`
 * Simplified expression migration for `authorizeRequests`
@@ -27,6 +37,15 @@ Java::
 http.csrf((csrf) -> csrf.spa());
 ----
 
+== Crypto
+
+* Added Password4j-based password encoders providing alternative implementations for popular hashing algorithms:
+** `Argon2Password4jPasswordEncoder` - xref:features/authentication/password-storage.adoc#password4j-argon2[Argon2]
+** `BcryptPassword4jPasswordEncoder` - xref:features/authentication/password-storage.adoc#password4j-bcrypt[BCrypt]
+** `ScryptPassword4jPasswordEncoder` - xref:features/authentication/password-storage.adoc#password4j-scrypt[SCrypt]
+** `Pbkdf2Password4jPasswordEncoder` - xref:features/authentication/password-storage.adoc#password4j-pbkdf2[PBKDF2]
+** `BalloonHashingPassword4jPasswordEncoder` - xref:features/authentication/password-storage.adoc#password4j-balloon[Balloon Hashing]
+
 == Data
 
 * Added support to Authorized objects for Spring Data types
@@ -38,9 +57,10 @@ http.csrf((csrf) -> csrf.spa());
 == OAuth 2.0
 
 * Removed support for password grant
-* Added OAuth2 Support for xref:features/integrations/rest/http-interface.adoc[HTTP Interface Integration]
+* Added OAuth2 Support for xref:features/integrations/rest/http-service-client.adoc[HTTP Service Clients]
 * Added support for custom `JwkSource` in `NimbusJwtDecoder`, allowing usage of Nimbus's `JwkSourceBuilder` API
 * Added builder for `NimbusJwtEncoder`, supports specifying an EC or RSA key pair or a secret key
+* Added support for `@ClientRegistrationId` at the xref:features/integrations/rest/http-service-client.adoc#type[type level], eliminating the need for method level repetition
 
 == SAML 2.0
 
@@ -48,6 +68,11 @@ http.csrf((csrf) -> csrf.spa());
 * Removed GET request support from `Saml2AuthenticationTokenConverter`
 * Added JDBC-based `AssertingPartyMetadataRepository`
 * Made so that SLO still returns `<saml2:LogoutResponse>` even when validation fails
+* Removed Open SAML 4 support; applications should migrate to Open SAML 5
+
+== Test
+
+* https://github.com/spring-projects/spring-security/issues/17974[Add SecurityMockMvcResultMatchers.withAuthorities(String...)]
 
 == Web
 

@@ -18,9 +18,12 @@ package org.springframework.security.web.authentication.ui;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.Collection;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 import jakarta.servlet.FilterChain;
@@ -29,11 +32,16 @@ import jakarta.servlet.ServletRequest;
 import jakarta.servlet.ServletResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.jspecify.annotations.Nullable;
 
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.context.SecurityContextHolderStrategy;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.authentication.rememberme.AbstractRememberMeServices;
 import org.springframework.util.Assert;
 import org.springframework.web.filter.GenericFilterBean;
+import org.springframework.web.util.UriComponentsBuilder;
 
 /**
  * For internal use with namespace configuration in the case where a user doesn't
@@ -51,11 +59,14 @@ public class DefaultLoginPageGeneratingFilter extends GenericFilterBean {
 
 	public static final String ERROR_PARAMETER_NAME = "error";
 
-	private String loginPageUrl;
+	private SecurityContextHolderStrategy securityContextHolderStrategy = SecurityContextHolder
+		.getContextHolderStrategy();
 
-	private String logoutSuccessUrl;
+	private @Nullable String loginPageUrl;
 
-	private String failureUrl;
+	private @Nullable String logoutSuccessUrl;
+
+	private @Nullable String failureUrl;
 
 	private boolean formLoginEnabled;
 
@@ -67,18 +78,24 @@ public class DefaultLoginPageGeneratingFilter extends GenericFilterBean {
 
 	private boolean oneTimeTokenEnabled;
 
-	private String authenticationUrl;
+	private @Nullable String authenticationUrl;
 
-	private String generateOneTimeTokenUrl;
+	private @Nullable String generateOneTimeTokenUrl;
 
-	private String usernameParameter;
+	private @Nullable String usernameParameter;
 
-	private String passwordParameter;
+	private @Nullable String passwordParameter;
 
-	private String rememberMeParameter;
+	private @Nullable String rememberMeParameter;
 
+	private final String factorParameter = "factor";
+
+	private final Collection<String> allowedParameters = List.of(this.factorParameter);
+
+	@SuppressWarnings("NullAway.Init")
 	private Map<String, String> oauth2AuthenticationUrlToClientName;
 
+	@SuppressWarnings("NullAway.Init")
 	private Map<String, String> saml2AuthenticationUrlToProviderName;
 
 	private Function<HttpServletRequest, Map<String, String>> resolveHiddenInputs = (request) -> Collections.emptyMap();
@@ -104,6 +121,18 @@ public class DefaultLoginPageGeneratingFilter extends GenericFilterBean {
 		if (authFilter.getRememberMeServices() instanceof AbstractRememberMeServices rememberMeServices) {
 			this.rememberMeParameter = rememberMeServices.getParameter();
 		}
+	}
+
+	/**
+	 * Use this {@link SecurityContextHolderStrategy} to retrieve authenticated users.
+	 * <p>
+	 * Uses {@link SecurityContextHolder#getContextHolderStrategy()} by default.
+	 * @param securityContextHolderStrategy the strategy to use
+	 * @since 7.0
+	 */
+	public void setSecurityContextHolderStrategy(SecurityContextHolderStrategy securityContextHolderStrategy) {
+		Assert.notNull(securityContextHolderStrategy, "securityContextHolderStrategy cannot be null");
+		this.securityContextHolderStrategy = securityContextHolderStrategy;
 	}
 
 	/**
@@ -136,7 +165,7 @@ public class DefaultLoginPageGeneratingFilter extends GenericFilterBean {
 		this.logoutSuccessUrl = logoutSuccessUrl;
 	}
 
-	public String getLoginPageUrl() {
+	public @Nullable String getLoginPageUrl() {
 		return this.loginPageUrl;
 	}
 
@@ -220,16 +249,43 @@ public class DefaultLoginPageGeneratingFilter extends GenericFilterBean {
 		String errorMsg = "Invalid credentials";
 		String contextPath = request.getContextPath();
 
-		return HtmlTemplates.fromTemplate(LOGIN_PAGE_TEMPLATE)
+		HtmlTemplates.Builder builder = HtmlTemplates.fromTemplate(LOGIN_PAGE_TEMPLATE)
 			.withRawHtml("contextPath", contextPath)
-			.withRawHtml("javaScript", renderJavaScript(request, contextPath))
-			.withRawHtml("formLogin", renderFormLogin(request, loginError, logoutSuccess, contextPath, errorMsg))
-			.withRawHtml("oneTimeTokenLogin",
-					renderOneTimeTokenLogin(request, loginError, logoutSuccess, contextPath, errorMsg))
-			.withRawHtml("oauth2Login", renderOAuth2Login(loginError, logoutSuccess, errorMsg, contextPath))
-			.withRawHtml("saml2Login", renderSaml2Login(loginError, logoutSuccess, errorMsg, contextPath))
-			.withRawHtml("passkeyLogin", renderPasskeyLogin())
-			.render();
+			.withRawHtml("javaScript", "")
+			.withRawHtml("formLogin", "")
+			.withRawHtml("oneTimeTokenLogin", "")
+			.withRawHtml("oauth2Login", "")
+			.withRawHtml("saml2Login", "")
+			.withRawHtml("passkeyLogin", "");
+
+		Predicate<String> wantsAuthority = wantsAuthority(request);
+		if (wantsAuthority.test("webauthn")) {
+			builder.withRawHtml("javaScript", renderJavaScript(request, contextPath))
+				.withRawHtml("passkeyLogin", renderPasskeyLogin());
+		}
+		if (wantsAuthority.test("password")) {
+			builder.withRawHtml("formLogin",
+					renderFormLogin(request, loginError, logoutSuccess, contextPath, errorMsg));
+		}
+		if (wantsAuthority.test("ott")) {
+			builder.withRawHtml("oneTimeTokenLogin",
+					renderOneTimeTokenLogin(request, loginError, logoutSuccess, contextPath, errorMsg));
+		}
+		if (wantsAuthority.test("authorization_code")) {
+			builder.withRawHtml("oauth2Login", renderOAuth2Login(loginError, logoutSuccess, errorMsg, contextPath));
+		}
+		if (wantsAuthority.test("saml_response")) {
+			builder.withRawHtml("saml2Login", renderSaml2Login(loginError, logoutSuccess, errorMsg, contextPath));
+		}
+		return builder.render();
+	}
+
+	private Predicate<String> wantsAuthority(HttpServletRequest request) {
+		String[] authorities = request.getParameterValues(this.factorParameter);
+		if (authorities == null) {
+			return (authority) -> true;
+		}
+		return List.of(authorities)::contains;
 	}
 
 	private String renderJavaScript(HttpServletRequest request, String contextPath) {
@@ -268,6 +324,13 @@ public class DefaultLoginPageGeneratingFilter extends GenericFilterBean {
 			return "";
 		}
 
+		String username = getUsername();
+		String usernameInput = ((username != null)
+				? HtmlTemplates.fromTemplate(FORM_READONLY_USERNAME_INPUT).withValue("username", username)
+				: HtmlTemplates.fromTemplate(FORM_USERNAME_INPUT))
+			.withValue("usernameParameter", this.usernameParameter)
+			.render();
+
 		String hiddenInputs = this.resolveHiddenInputs.apply(request)
 			.entrySet()
 			.stream()
@@ -278,7 +341,7 @@ public class DefaultLoginPageGeneratingFilter extends GenericFilterBean {
 			.withValue("loginUrl", contextPath + this.authenticationUrl)
 			.withRawHtml("errorMessage", renderError(loginError, errorMsg))
 			.withRawHtml("logoutMessage", renderSuccess(logoutSuccess))
-			.withValue("usernameParameter", this.usernameParameter)
+			.withRawHtml("usernameInput", usernameInput)
 			.withValue("passwordParameter", this.passwordParameter)
 			.withRawHtml("rememberMeInput", renderRememberMe(this.rememberMeParameter))
 			.withRawHtml("hiddenInputs", hiddenInputs)
@@ -298,11 +361,17 @@ public class DefaultLoginPageGeneratingFilter extends GenericFilterBean {
 			.map((inputKeyValue) -> renderHiddenInput(inputKeyValue.getKey(), inputKeyValue.getValue()))
 			.collect(Collectors.joining("\n"));
 
+		String username = getUsername();
+		String usernameInput = (username != null)
+				? HtmlTemplates.fromTemplate(ONE_TIME_READONLY_USERNAME_INPUT).withValue("username", username).render()
+				: ONE_TIME_USERNAME_INPUT;
+
 		return HtmlTemplates.fromTemplate(ONE_TIME_TEMPLATE)
 			.withValue("generateOneTimeTokenUrl", contextPath + this.generateOneTimeTokenUrl)
 			.withRawHtml("errorMessage", renderError(loginError, errorMsg))
 			.withRawHtml("logoutMessage", renderSuccess(logoutSuccess))
 			.withRawHtml("hiddenInputs", hiddenInputs)
+			.withRawHtml("usernameInput", usernameInput)
 			.render();
 	}
 
@@ -361,7 +430,7 @@ public class DefaultLoginPageGeneratingFilter extends GenericFilterBean {
 			.render();
 	}
 
-	private String renderRememberMe(String paramName) {
+	private String renderRememberMe(@Nullable String paramName) {
 		if (paramName == null) {
 			return "";
 		}
@@ -369,6 +438,14 @@ public class DefaultLoginPageGeneratingFilter extends GenericFilterBean {
 			.fromTemplate("<p><input type='checkbox' name='{{paramName}}'/> Remember me on this computer.</p>")
 			.withValue("paramName", paramName)
 			.render();
+	}
+
+	private @Nullable String getUsername() {
+		Authentication authentication = this.securityContextHolderStrategy.getContext().getAuthentication();
+		if (authentication != null && authentication.isAuthenticated()) {
+			return authentication.getName();
+		}
+		return null;
 	}
 
 	private boolean isLogoutSuccess(HttpServletRequest request) {
@@ -397,7 +474,7 @@ public class DefaultLoginPageGeneratingFilter extends GenericFilterBean {
 		return "<div class=\"alert alert-success\" role=\"alert\">You have been signed out</div>";
 	}
 
-	private boolean matches(HttpServletRequest request, String url) {
+	private boolean matches(HttpServletRequest request, @Nullable String url) {
 		if (!"GET".equals(request.getMethod()) || url == null) {
 			return false;
 		}
@@ -410,10 +487,19 @@ public class DefaultLoginPageGeneratingFilter extends GenericFilterBean {
 		if (request.getQueryString() != null) {
 			uri += "?" + request.getQueryString();
 		}
-		if ("".equals(request.getContextPath())) {
-			return uri.equals(url);
+		UriComponentsBuilder addAllowed = UriComponentsBuilder.fromUriString(url);
+		for (String parameter : this.allowedParameters) {
+			String[] values = request.getParameterValues(parameter);
+			if (values != null) {
+				for (String value : values) {
+					addAllowed.queryParam(parameter, value);
+				}
+			}
 		}
-		return uri.equals(request.getContextPath() + url);
+		if ("".equals(request.getContextPath())) {
+			return uri.equals(addAllowed.toUriString());
+		}
+		return uri.equals(request.getContextPath() + addAllowed.toUriString());
 	}
 
 	private static final String CSRF_HEADERS = """
@@ -463,7 +549,7 @@ public class DefaultLoginPageGeneratingFilter extends GenericFilterBean {
 			{{errorMessage}}{{logoutMessage}}
 			        <p>
 			          <label for="username" class="screenreader">Username</label>
-			          <input type="text" id="username" name="{{usernameParameter}}" placeholder="Username" required autofocus>
+			          {{usernameInput}}
 			        </p>
 			        <p>
 			          <label for="password" class="screenreader">Password</label>
@@ -473,6 +559,14 @@ public class DefaultLoginPageGeneratingFilter extends GenericFilterBean {
 			{{hiddenInputs}}
 			        <button type="submit" class="primary">Sign in</button>
 			      </form>""";
+
+	private static final String FORM_READONLY_USERNAME_INPUT = """
+			<input type="text" id="username" name="{{usernameParameter}}" value="{{username}}" placeholder="Username" required readonly>
+			""";
+
+	private static final String FORM_USERNAME_INPUT = """
+			<input type="text" id="username" name="{{usernameParameter}}" placeholder="Username" required autofocus>
+			""";
 
 	private static final String HIDDEN_HTML_INPUT_TEMPLATE = """
 			<input name="{{name}}" type="hidden" value="{{value}}" />
@@ -506,11 +600,19 @@ public class DefaultLoginPageGeneratingFilter extends GenericFilterBean {
 			{{errorMessage}}{{logoutMessage}}
 			        <p>
 			          <label for="ott-username" class="screenreader">Username</label>
-			          <input type="text" id="ott-username" name="username" placeholder="Username" required>
+			          {{usernameInput}}
 			        </p>
 			{{hiddenInputs}}
 			        <button class="primary" type="submit" form="ott-form">Send Token</button>
 			      </form>
+			""";
+
+	private static final String ONE_TIME_READONLY_USERNAME_INPUT = """
+			<input type="text" id="ott-username" name="username" value="{{username}}" placeholder="Username" required readonly>
+			""";
+
+	private static final String ONE_TIME_USERNAME_INPUT = """
+			<input type="text" id="ott-username" name="username" placeholder="Username" required>
 			""";
 
 }

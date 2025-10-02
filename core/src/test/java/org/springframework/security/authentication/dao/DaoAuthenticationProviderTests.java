@@ -31,12 +31,14 @@ import org.springframework.security.authentication.CredentialsExpiredException;
 import org.springframework.security.authentication.DisabledException;
 import org.springframework.security.authentication.InternalAuthenticationServiceException;
 import org.springframework.security.authentication.LockedException;
+import org.springframework.security.authentication.SecurityAssertions;
 import org.springframework.security.authentication.TestingAuthenticationToken;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.authentication.password.CompromisedPasswordChecker;
 import org.springframework.security.authentication.password.CompromisedPasswordDecision;
 import org.springframework.security.authentication.password.CompromisedPasswordException;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthorities;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.AuthorityUtils;
 import org.springframework.security.core.userdetails.PasswordEncodedUser;
@@ -502,6 +504,15 @@ public class DaoAuthenticationProviderTests {
 		Authentication authentication = provider
 			.authenticate(UsernamePasswordAuthenticationToken.unauthenticated("user", "strongpassword"));
 		assertThat(authentication).isNotNull();
+	}
+
+	@Test
+	void authenticateWhenSuccessThenIssuesFactor() {
+		UserDetails user = PasswordEncodedUser.user();
+		DaoAuthenticationProvider provider = new DaoAuthenticationProvider(withUsers(user));
+		Authentication request = new UsernamePasswordAuthenticationToken("user", "password");
+		Authentication result = provider.authenticate(request);
+		SecurityAssertions.assertThat(result).hasAuthority(GrantedAuthorities.FACTOR_PASSWORD_AUTHORITY);
 	}
 
 	private UserDetailsService withUsers(UserDetails... users) {

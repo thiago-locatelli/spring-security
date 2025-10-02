@@ -19,7 +19,6 @@ package org.springframework.security.saml2.provider.service.authentication;
 import java.io.Serializable;
 import java.nio.charset.Charset;
 
-import org.springframework.security.core.SpringSecurityCoreVersion;
 import org.springframework.security.saml2.provider.service.registration.RelyingPartyRegistration;
 import org.springframework.security.saml2.provider.service.registration.Saml2MessageBinding;
 import org.springframework.util.Assert;
@@ -39,7 +38,7 @@ import org.springframework.util.Assert;
  */
 public abstract class AbstractSaml2AuthenticationRequest implements Serializable {
 
-	private static final long serialVersionUID = SpringSecurityCoreVersion.SERIAL_VERSION_UID;
+	private static final long serialVersionUID = 620L;
 
 	private final String samlRequest;
 

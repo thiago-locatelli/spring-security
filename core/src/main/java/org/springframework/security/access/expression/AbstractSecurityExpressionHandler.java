@@ -28,6 +28,8 @@ import org.springframework.expression.spel.standard.SpelExpressionParser;
 import org.springframework.expression.spel.support.StandardEvaluationContext;
 import org.springframework.security.access.PermissionEvaluator;
 import org.springframework.security.access.hierarchicalroles.RoleHierarchy;
+import org.springframework.security.authorization.AuthorizationManagerFactory;
+import org.springframework.security.authorization.DefaultAuthorizationManagerFactory;
 import org.springframework.security.core.Authentication;
 import org.springframework.util.Assert;
 
@@ -38,6 +40,7 @@ import org.springframework.util.Assert;
  *
  * @author Luke Taylor
  * @author Evgeniy Cheban
+ * @author Steve Riesenberg
  * @since 3.1
  */
 public abstract class AbstractSecurityExpressionHandler<T>
@@ -48,6 +51,8 @@ public abstract class AbstractSecurityExpressionHandler<T>
 	private @Nullable BeanResolver beanResolver;
 
 	private @Nullable RoleHierarchy roleHierarchy;
+
+	private AuthorizationManagerFactory<T> authorizationManagerFactory = new DefaultAuthorizationManagerFactory<>();
 
 	private PermissionEvaluator permissionEvaluator = new DenyAllPermissionEvaluator();
 
@@ -70,7 +75,7 @@ public abstract class AbstractSecurityExpressionHandler<T>
 	 * suitable root object.
 	 */
 	@Override
-	public final EvaluationContext createEvaluationContext(Authentication authentication, T invocation) {
+	public final EvaluationContext createEvaluationContext(@Nullable Authentication authentication, T invocation) {
 		SecurityExpressionOperations root = createSecurityExpressionRoot(authentication, invocation);
 		StandardEvaluationContext ctx = createEvaluationContextInternal(authentication, invocation);
 		if (this.beanResolver != null) {
@@ -91,7 +96,8 @@ public abstract class AbstractSecurityExpressionHandler<T>
 	 * @return A {@code StandardEvaluationContext} or potentially a custom subclass if
 	 * overridden.
 	 */
-	protected StandardEvaluationContext createEvaluationContextInternal(Authentication authentication, T invocation) {
+	protected StandardEvaluationContext createEvaluationContextInternal(@Nullable Authentication authentication,
+			T invocation) {
 		return new StandardEvaluationContext();
 	}
 
@@ -102,14 +108,61 @@ public abstract class AbstractSecurityExpressionHandler<T>
 	 * @param invocation the invocation (filter, method, channel)
 	 * @return the object
 	 */
-	protected abstract SecurityExpressionOperations createSecurityExpressionRoot(Authentication authentication,
-			T invocation);
+	protected abstract SecurityExpressionOperations createSecurityExpressionRoot(
+			@Nullable Authentication authentication, T invocation);
 
+	/**
+	 * Sets the {@link AuthorizationManagerFactory} to be used. The default is
+	 * {@link DefaultAuthorizationManagerFactory}.
+	 * @param authorizationManagerFactory the {@link AuthorizationManagerFactory} to use.
+	 * Cannot be null.
+	 * @since 7.0
+	 */
+	public final void setAuthorizationManagerFactory(AuthorizationManagerFactory<T> authorizationManagerFactory) {
+		Assert.notNull(authorizationManagerFactory, "authorizationManagerFactory cannot be null");
+		this.authorizationManagerFactory = authorizationManagerFactory;
+	}
+
+	protected final AuthorizationManagerFactory<T> getAuthorizationManagerFactory() {
+		return this.authorizationManagerFactory;
+	}
+
+	/**
+	 * Allows accessing the {@link DefaultAuthorizationManagerFactory} for getting and
+	 * setting defaults. This method will be removed in Spring Security 8.
+	 * @return the {@link DefaultAuthorizationManagerFactory}
+	 * @throws IllegalStateException if a different {@link AuthorizationManagerFactory}
+	 * was already set
+	 * @deprecated Use
+	 * {@link #setAuthorizationManagerFactory(AuthorizationManagerFactory)} instead
+	 */
+	@Deprecated(since = "7.0")
+	protected final DefaultAuthorizationManagerFactory<T> getDefaultAuthorizationManagerFactory() {
+		if (!(this.authorizationManagerFactory instanceof DefaultAuthorizationManagerFactory<T> defaultAuthorizationManagerFactory)) {
+			throw new IllegalStateException(
+					"authorizationManagerFactory must be an instance of DefaultAuthorizationManagerFactory");
+		}
+
+		return defaultAuthorizationManagerFactory;
+	}
+
+	/**
+	 * @deprecated Use {@link #getDefaultAuthorizationManagerFactory()} instead
+	 */
+	@Deprecated(since = "7.0")
 	protected @Nullable RoleHierarchy getRoleHierarchy() {
 		return this.roleHierarchy;
 	}
 
-	public void setRoleHierarchy(RoleHierarchy roleHierarchy) {
+	/**
+	 * @deprecated Use
+	 * {@link #setAuthorizationManagerFactory(AuthorizationManagerFactory)} instead
+	 */
+	@Deprecated(since = "7.0")
+	public void setRoleHierarchy(@Nullable RoleHierarchy roleHierarchy) {
+		if (roleHierarchy != null) {
+			getDefaultAuthorizationManagerFactory().setRoleHierarchy(roleHierarchy);
+		}
 		this.roleHierarchy = roleHierarchy;
 	}
 

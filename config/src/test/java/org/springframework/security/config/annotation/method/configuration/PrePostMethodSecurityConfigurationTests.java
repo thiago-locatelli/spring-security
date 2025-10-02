@@ -33,6 +33,7 @@ import io.micrometer.observation.ObservationHandler;
 import io.micrometer.observation.ObservationRegistry;
 import io.micrometer.observation.ObservationTextPublisher;
 import jakarta.annotation.security.DenyAll;
+import jakarta.servlet.RequestDispatcher;
 import org.aopalliance.aop.Advice;
 import org.aopalliance.intercept.MethodInterceptor;
 import org.aopalliance.intercept.MethodInvocation;
@@ -91,6 +92,7 @@ import org.springframework.security.access.prepost.PostFilter;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.access.prepost.PreFilter;
 import org.springframework.security.authorization.AuthorizationDecision;
+import org.springframework.security.authorization.AuthorizationDeniedException;
 import org.springframework.security.authorization.AuthorizationEventPublisher;
 import org.springframework.security.authorization.AuthorizationManager;
 import org.springframework.security.authorization.SpringAuthorizationEventPublisher;
@@ -138,6 +140,7 @@ import org.springframework.web.servlet.config.annotation.EnableWebMvc;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.assertj.core.api.Assertions.assertThatNoException;
+import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.clearInvocations;
@@ -149,6 +152,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
@@ -277,6 +281,52 @@ public class PrePostMethodSecurityConfigurationTests {
 		this.methodSecurityService.preAuthorizeAdmin();
 		SecurityContextHolderStrategy strategy = this.spring.getContext().getBean(SecurityContextHolderStrategy.class);
 		verify(strategy, atLeastOnce()).getContext();
+	}
+
+	@WithMockUser(roles = { "ADMIN", "USER" })
+	@Test
+	public void hasAllAuthoritiesRoleUserRoleAdminWhenGranted() {
+		this.spring.register(MethodSecurityServiceConfig.class).autowire();
+		this.methodSecurityService.hasAllAuthoritiesRoleUserRoleAdmin();
+	}
+
+	@WithMockUser(roles = { "USER" })
+	@Test
+	public void hasAllAuthoritiesRoleUserRoleAdminWhenMissingOneThenDenied() {
+		this.spring.register(MethodSecurityServiceConfig.class).autowire();
+		assertThatExceptionOfType(AccessDeniedException.class)
+			.isThrownBy(this.methodSecurityService::hasAllAuthoritiesRoleUserRoleAdmin);
+	}
+
+	@WithMockUser(roles = { "OTHER" })
+	@Test
+	public void hasAllAuthoritiesRoleUserRoleAdminWhenAllThenDenied() {
+		this.spring.register(MethodSecurityServiceConfig.class).autowire();
+		assertThatExceptionOfType(AccessDeniedException.class)
+			.isThrownBy(this.methodSecurityService::hasAllAuthoritiesRoleUserRoleAdmin);
+	}
+
+	@WithMockUser(roles = { "ADMIN", "USER" })
+	@Test
+	public void hasAllRolesRoleUserRoleAdminWhenGranted() {
+		this.spring.register(MethodSecurityServiceConfig.class).autowire();
+		this.methodSecurityService.hasAllRolesUserAdmin();
+	}
+
+	@WithMockUser(roles = { "USER" })
+	@Test
+	public void hasAllRolesRoleUserRoleAdminWhenMissingOneThenDenied() {
+		this.spring.register(MethodSecurityServiceConfig.class).autowire();
+		assertThatExceptionOfType(AccessDeniedException.class)
+			.isThrownBy(this.methodSecurityService::hasAllRolesUserAdmin);
+	}
+
+	@WithMockUser(roles = { "OTHER" })
+	@Test
+	public void hasAllRolesRoleUserRoleAdminWhenAllThenDenied() {
+		this.spring.register(MethodSecurityServiceConfig.class).autowire();
+		assertThatExceptionOfType(AccessDeniedException.class)
+			.isThrownBy(this.methodSecurityService::hasAllRolesUserAdmin);
 	}
 
 	@WithMockUser(authorities = "PREFIX_ADMIN")
@@ -1279,6 +1329,19 @@ public class PrePostMethodSecurityConfigurationTests {
 		this.mvc.perform(requestWithUser).andExpect(status().isForbidden());
 	}
 
+	// gh-17761
+	@Test
+	void getWhenPostAuthorizeAuthenticationNameNotMatchThenNoExceptionExposedInRequest() throws Exception {
+		this.spring.register(WebMvcMethodSecurityConfig.class, BasicController.class).autowire();
+		// @formatter:off
+		MockHttpServletRequestBuilder requestWithUser = get("/authorized-person")
+				.param("name", "john")
+				.with(user("rob"));
+		// @formatter:on
+		this.mvc.perform(requestWithUser)
+			.andExpect(request().attribute(RequestDispatcher.ERROR_EXCEPTION, nullValue()));
+	}
+
 	@Test
 	void getWhenPostAuthorizeWithinServiceAuthenticationNameMatchesThenRespondsWithOk() throws Exception {
 		this.spring.register(WebMvcMethodSecurityConfig.class, BasicController.class, BasicService.class).autowire();
@@ -1346,6 +1409,14 @@ public class PrePostMethodSecurityConfigurationTests {
 				.with(user("rob"));
 		// @formatter:on
 		this.mvc.perform(requestWithUser).andExpect(status().isForbidden());
+	}
+
+	@Test
+	void checkCustomManagerWhenInvokedThenUsesBeanToAuthorize() {
+		this.spring.register(MethodSecurityServiceConfig.class).autowire();
+		MethodSecurityService service = this.spring.getContext().getBean(MethodSecurityService.class);
+		service.checkCustomManager(2);
+		assertThatExceptionOfType(AuthorizationDeniedException.class).isThrownBy(() -> service.checkCustomManager(1));
 	}
 
 	private static Consumer<ConfigurableWebApplicationContext> disallowBeanOverriding() {

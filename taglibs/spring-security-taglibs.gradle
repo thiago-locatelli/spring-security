@@ -1,3 +1,7 @@
+plugins {
+	id 'security-nullability'
+}
+
 apply plugin: 'io.spring.convention.spring-module'
 
 dependencies {
@@ -17,6 +21,7 @@ dependencies {
 
 	testRuntimeOnly 'jakarta.servlet.jsp.jstl:jakarta.servlet.jsp.jstl-api'
 
+	testImplementation project(':spring-security-access')
 	testImplementation "org.assertj:assertj-core"
 	testImplementation "org.junit.jupiter:junit-jupiter-api"
 	testImplementation "org.junit.jupiter:junit-jupiter-params"

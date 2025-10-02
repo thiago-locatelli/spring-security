@@ -49,7 +49,7 @@ This filter calls its configured `AuthenticationConverter` to create a `Saml2Aut
 This converter additionally resolves the <<servlet-saml2login-relyingpartyregistration, `RelyingPartyRegistration`>> and supplies it to `Saml2AuthenticationToken`.
 
 image:{icondir}/number_2.png[] Next, the filter passes the token to its configured xref:servlet/authentication/architecture.adoc#servlet-authentication-providermanager[`AuthenticationManager`].
-By default, it uses the <<servlet-saml2login-architecture,`OpenSaml4AuthenticationProvider`>>.
+By default, it uses the <<servlet-saml2login-architecture,`OpenSaml5AuthenticationProvider`>>.
 
 image:{icondir}/number_3.png[] If authentication fails, then _Failure_.
 
@@ -222,7 +222,7 @@ image:{icondir}/number_8.png[] Next, the provider validates each assertion's `Ex
 If any validations fail, authentication fails.
 
 image:{icondir}/number_9.png[] Following that, the provider takes the first assertion's `AttributeStatement` and maps it to a `Map<String, List<Object>>`.
-It also grants the `ROLE_USER` granted authority.
+It also grants the `FACTOR_SAML_RESPONSE` and `ROLE_USER` granted authorities.
 
 image:{icondir}/number_10.png[] And finally, it takes the `NameID` from the first assertion, the `Map` of attributes, and the `GrantedAuthority` and constructs a `Saml2AuthenticatedPrincipal`.
 Then, it places that principal and the authorities into a `Saml2Authentication`.

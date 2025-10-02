@@ -22,30 +22,47 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.authorization.AllAuthoritiesAuthorizationManager;
+import org.springframework.security.authorization.AuthenticatedAuthorizationManager;
+import org.springframework.security.authorization.AuthorityAuthorizationManager;
+import org.springframework.security.authorization.AuthorizationDecision;
+import org.springframework.security.authorization.AuthorizationManager;
+import org.springframework.security.authorization.AuthorizationManagers;
+import org.springframework.security.config.Customizer;
 import org.springframework.security.config.ObjectPostProcessor;
 import org.springframework.security.config.annotation.SecurityContextChangedListenerConfig;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configuration.WebSecurityCustomizer;
 import org.springframework.security.config.test.SpringTestContext;
 import org.springframework.security.config.test.SpringTestContextExtension;
 import org.springframework.security.config.users.AuthenticationTestConfiguration;
+import org.springframework.security.core.GrantedAuthorities;
 import org.springframework.security.core.context.SecurityContextChangedListener;
 import org.springframework.security.core.context.SecurityContextHolderStrategy;
 import org.springframework.security.core.userdetails.PasswordEncodedUser;
+import org.springframework.security.core.userdetails.User;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestBuilders;
+import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors;
 import org.springframework.security.web.PortMapper;
-import org.springframework.security.web.PortResolver;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.ExceptionTranslationFilter;
+import org.springframework.security.web.access.intercept.RequestAuthorizationContext;
 import org.springframework.security.web.authentication.AuthenticationFailureHandler;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.authentication.ott.OneTimeTokenGenerationSuccessHandler;
+import org.springframework.security.web.authentication.ott.RedirectOneTimeTokenGenerationSuccessHandler;
 import org.springframework.security.web.savedrequest.RequestCache;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.config.annotation.EnableWebMvc;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -58,6 +75,7 @@ import static org.springframework.security.config.Customizer.withDefaults;
 import static org.springframework.security.config.annotation.SecurityContextChangedListenerArgumentMatchers.setAuthentication;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestBuilders.formLogin;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestBuilders.logout;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.security.test.web.servlet.response.SecurityMockMvcResultMatchers.authenticated;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -380,10 +398,65 @@ public class FormLoginConfigurerTests {
 	}
 
 	@Test
-	public void configureWhenPortResolverBeanThenPortResolverUsed() throws Exception {
-		this.spring.register(CustomPortResolverConfig.class).autowire();
-		this.mockMvc.perform(get("/requires-authentication")).andExpect(status().is3xxRedirection());
-		verify(this.spring.getContext().getBean(PortResolver.class)).getServerPort(any());
+	void requestWhenUnauthenticatedThenRequiresTwoSteps() throws Exception {
+		this.spring.register(MfaDslConfig.class, UserConfig.class).autowire();
+		UserDetails user = PasswordEncodedUser.user();
+		this.mockMvc.perform(get("/profile").with(user(user)))
+			.andExpect(status().is3xxRedirection())
+			.andExpect(redirectedUrl("http://localhost/login?factor=password"));
+		this.mockMvc
+			.perform(post("/ott/generate").param("username", "rod")
+				.with(user(user))
+				.with(SecurityMockMvcRequestPostProcessors.csrf()))
+			.andExpect(status().is3xxRedirection())
+			.andExpect(redirectedUrl("/ott/sent"));
+		this.mockMvc
+			.perform(post("/login").param("username", "rod")
+				.param("password", "password")
+				.with(SecurityMockMvcRequestPostProcessors.csrf()))
+			.andExpect(status().is3xxRedirection())
+			.andExpect(redirectedUrl("/"));
+		user = PasswordEncodedUser.withUserDetails(user)
+			.authorities("profile:read", GrantedAuthorities.FACTOR_OTT_AUTHORITY)
+			.build();
+		this.mockMvc.perform(get("/profile").with(user(user)))
+			.andExpect(status().is3xxRedirection())
+			.andExpect(redirectedUrl("http://localhost/login?factor=password"));
+		user = PasswordEncodedUser.withUserDetails(user)
+			.authorities("profile:read", GrantedAuthorities.FACTOR_PASSWORD_AUTHORITY)
+			.build();
+		this.mockMvc.perform(get("/profile").with(user(user)))
+			.andExpect(status().is3xxRedirection())
+			.andExpect(redirectedUrl("http://localhost/login?factor=ott"));
+		user = PasswordEncodedUser.withUserDetails(user)
+			.authorities("profile:read", GrantedAuthorities.FACTOR_PASSWORD_AUTHORITY,
+					GrantedAuthorities.FACTOR_OTT_AUTHORITY)
+			.build();
+		this.mockMvc.perform(get("/profile").with(user(user))).andExpect(status().isNotFound());
+	}
+
+	@Test
+	void requestWhenUnauthenticatedX509ThenRequiresTwoSteps() throws Exception {
+		this.spring.register(MfaDslX509Config.class, UserConfig.class, BasicMfaController.class).autowire();
+		this.mockMvc.perform(get("/profile")).andExpect(status().is3xxRedirection());
+		this.mockMvc.perform(get("/profile").with(user(User.withUsername("rod").authorities("profile:read").build())))
+			.andExpect(status().isForbidden());
+		this.mockMvc.perform(get("/login")).andExpect(status().isOk());
+		this.mockMvc.perform(get("/profile").with(SecurityMockMvcRequestPostProcessors.x509("rod.cer")))
+			.andExpect(status().is3xxRedirection())
+			.andExpect(redirectedUrl("http://localhost/login?factor=password"));
+		this.mockMvc
+			.perform(post("/login").param("username", "rod")
+				.param("password", "password")
+				.with(SecurityMockMvcRequestPostProcessors.x509("rod.cer"))
+				.with(SecurityMockMvcRequestPostProcessors.csrf()))
+			.andExpect(status().is3xxRedirection())
+			.andExpect(redirectedUrl("/"));
+		UserDetails authorized = PasswordEncodedUser.withUsername("rod")
+			.authorities("profile:read", GrantedAuthorities.FACTOR_X509_AUTHORITY,
+					GrantedAuthorities.FACTOR_PASSWORD_AUTHORITY)
+			.build();
+		this.mockMvc.perform(get("/profile").with(user(authorized))).andExpect(status().isOk());
 	}
 
 	@Configuration
@@ -713,40 +786,116 @@ public class FormLoginConfigurerTests {
 
 	}
 
-	@Configuration
-	@EnableWebSecurity
-	static class CustomPortResolverConfig {
-
-		@Bean
-		SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
-			// @formatter:off
-			http
-				.authorizeHttpRequests((authorize) -> authorize
-					.anyRequest().authenticated()
-				)
-				.formLogin(withDefaults())
-				.requestCache(withDefaults());
-			return http.build();
-			// @formatter:on
-		}
-
-		@Bean
-		PortResolver portResolver() {
-			return mock(PortResolver.class);
-		}
-
-		@Bean
-		UserDetailsService userDetailsService() {
-			return new InMemoryUserDetailsManager(PasswordEncodedUser.user());
-		}
-
-	}
-
 	static class ReflectingObjectPostProcessor implements ObjectPostProcessor<Object> {
 
 		@Override
 		public <O> O postProcess(O object) {
 			return object;
+		}
+
+	}
+
+	@Configuration
+	@EnableWebSecurity
+	static class MfaDslConfig {
+
+		@Bean
+		SecurityFilterChain filterChain(HttpSecurity http,
+				AuthorizationManagerFactory<RequestAuthorizationContext> authz) throws Exception {
+			// @formatter:off
+			http
+				.formLogin(Customizer.withDefaults())
+				.oneTimeTokenLogin(Customizer.withDefaults())
+				.authorizeHttpRequests((authorize) -> authorize
+					.requestMatchers("/profile").access(authz.hasAuthority("profile:read"))
+					.anyRequest().access(authz.authenticated())
+				);
+			return http.build();
+			// @formatter:on
+		}
+
+		@Bean
+		OneTimeTokenGenerationSuccessHandler tokenGenerationSuccessHandler() {
+			return new RedirectOneTimeTokenGenerationSuccessHandler("/ott/sent");
+		}
+
+		@Bean
+		AuthorizationManagerFactory<?> authz() {
+			return new AuthorizationManagerFactory<>(GrantedAuthorities.FACTOR_PASSWORD_AUTHORITY,
+					GrantedAuthorities.FACTOR_OTT_AUTHORITY);
+		}
+
+	}
+
+	@Configuration
+	@EnableWebSecurity
+	@EnableMethodSecurity
+	static class MfaDslX509Config {
+
+		@Bean
+		SecurityFilterChain filterChain(HttpSecurity http,
+				AuthorizationManagerFactory<RequestAuthorizationContext> authz) throws Exception {
+			// @formatter:off
+			http
+				.x509(Customizer.withDefaults())
+				.formLogin(Customizer.withDefaults())
+				.authorizeHttpRequests((authorize) -> authorize
+					.anyRequest().access(authz.authenticated())
+				);
+			return http.build();
+			// @formatter:on
+		}
+
+		@Bean
+		AuthorizationManagerFactory<?> authz() {
+			return new AuthorizationManagerFactory<>(GrantedAuthorities.FACTOR_X509_AUTHORITY,
+					GrantedAuthorities.FACTOR_PASSWORD_AUTHORITY);
+		}
+
+	}
+
+	@Configuration
+	static class UserConfig {
+
+		@Bean
+		UserDetails rod() {
+			return PasswordEncodedUser.withUsername("rod").password("password").build();
+		}
+
+		@Bean
+		UserDetailsService users(UserDetails user) {
+			return new InMemoryUserDetailsManager(user);
+		}
+
+	}
+
+	@RestController
+	static class BasicMfaController {
+
+		@GetMapping("/profile")
+		@PreAuthorize("@authz.hasAuthority('profile:read')")
+		String profile() {
+			return "profile";
+		}
+
+	}
+
+	public static class AuthorizationManagerFactory<T> {
+
+		private final AuthorizationManager<T> authorities;
+
+		AuthorizationManagerFactory(String... authorities) {
+			this.authorities = AllAuthoritiesAuthorizationManager.hasAllAuthorities(authorities);
+		}
+
+		public AuthorizationManager<T> authenticated() {
+			AuthenticatedAuthorizationManager<T> authenticated = AuthenticatedAuthorizationManager.authenticated();
+			return AuthorizationManagers.allOf(new AuthorizationDecision(false), this.authorities, authenticated);
+		}
+
+		public AuthorizationManager<T> hasAuthority(String authority) {
+			AuthorityAuthorizationManager<T> authorized = AuthorityAuthorizationManager.hasAuthority(authority);
+			return AuthorizationManagers.allOf(new AuthorizationDecision(false), this.authorities, authorized);
 		}
 
 	}

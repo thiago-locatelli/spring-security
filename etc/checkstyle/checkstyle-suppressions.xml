@@ -34,8 +34,10 @@
 	<suppress files="WebSecurityConfigurationTests\.java" checks="SpringMethodVisibility"/>
 	<suppress files="WithSecurityContextTestExecutionListenerTests\.java" checks="SpringMethodVisibility"/>
 	<suppress files="JoseHeader\.java" checks="SpringMethodVisibility"/>
+	<suppress files="AbstractOAuth2AuthorizationCodeRequestAuthenticationToken\.java" checks="SpringMethodVisibility"/>
 	<suppress files="DefaultLoginPageGeneratingFilterTests\.java" checks="SpringLeadingWhitespace"/>
 	<suppress files="AuthenticationException\.java" checks="MutableException"/>
+	<suppress files="FilterInvocationExpressionRoot\.java" checks="SpringMethodVisibility"/>
 
 	<!-- Lambdas that we can't replace with a method reference because a closure is required -->
 	<suppress files="BearerTokenAuthenticationFilter\.java" checks="SpringLambda"/>
