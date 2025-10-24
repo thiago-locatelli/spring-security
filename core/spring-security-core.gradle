@@ -25,8 +25,10 @@ dependencies {
 	optional 'org.springframework:spring-jdbc'
 	optional 'org.springframework:spring-tx'
 	optional 'org.jetbrains.kotlinx:kotlinx-coroutines-reactor'
+	optional 'tools.jackson.core:jackson-databind'
 
 	testImplementation 'commons-collections:commons-collections'
+	testImplementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310'
 	testImplementation 'io.projectreactor:reactor-test'
 	testImplementation "org.assertj:assertj-core"
 	testImplementation "org.junit.jupiter:junit-jupiter-api"

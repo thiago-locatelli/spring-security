@@ -25,6 +25,7 @@ import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.RememberMeAuthenticationToken;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.FactorGrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.User;
 
@@ -43,11 +44,14 @@ import org.springframework.security.core.userdetails.User;
  * </pre> <b>Note: use {@link SecurityJackson2Modules#getModules(ClassLoader)} to get list
  * of all security modules.</b>
  *
- * @author Jitendra Singh.
+ * @author Jitendra Singh
  * @since 4.2
  * @see SecurityJackson2Modules
+ * @deprecated as of 7.0 in favor of
+ * {@link org.springframework.security.jackson.CoreJacksonModule} based on Jackson 3
  */
-@SuppressWarnings("serial")
+@SuppressWarnings({ "serial", "removal" })
+@Deprecated(forRemoval = true)
 public class CoreJackson2Module extends SimpleModule {
 
 	public CoreJackson2Module() {
@@ -60,6 +64,7 @@ public class CoreJackson2Module extends SimpleModule {
 		context.setMixInAnnotations(AnonymousAuthenticationToken.class, AnonymousAuthenticationTokenMixin.class);
 		context.setMixInAnnotations(RememberMeAuthenticationToken.class, RememberMeAuthenticationTokenMixin.class);
 		context.setMixInAnnotations(SimpleGrantedAuthority.class, SimpleGrantedAuthorityMixin.class);
+		context.setMixInAnnotations(FactorGrantedAuthority.class, FactorGrantedAuthorityMixin.class);
 		context.setMixInAnnotations(Collections.unmodifiableSet(Collections.emptySet()).getClass(),
 				UnmodifiableSetMixin.class);
 		context.setMixInAnnotations(Collections.unmodifiableList(Collections.emptyList()).getClass(),

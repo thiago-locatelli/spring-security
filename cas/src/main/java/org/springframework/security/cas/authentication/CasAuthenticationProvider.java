@@ -38,10 +38,9 @@ import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.cas.ServiceProperties;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
-import org.springframework.security.core.GrantedAuthorities;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.SpringSecurityMessageSource;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.authority.FactorGrantedAuthority;
 import org.springframework.security.core.authority.mapping.GrantedAuthoritiesMapper;
 import org.springframework.security.core.authority.mapping.NullAuthoritiesMapper;
 import org.springframework.security.core.userdetails.AuthenticationUserDetailsService;
@@ -70,7 +69,7 @@ public class CasAuthenticationProvider implements AuthenticationProvider, Initia
 
 	private static final Log logger = LogFactory.getLog(CasAuthenticationProvider.class);
 
-	private static final String AUTHORITY = GrantedAuthorities.FACTOR_CAS_AUTHORITY;
+	private static final String AUTHORITY = FactorGrantedAuthority.CAS_AUTHORITY;
 
 	@SuppressWarnings("NullAway.Init")
 	private AuthenticationUserDetailsService<CasAssertionAuthenticationToken> authenticationUserDetailsService;
@@ -151,7 +150,7 @@ public class CasAuthenticationProvider implements AuthenticationProvider, Initia
 			this.userDetailsChecker.check(userDetails);
 			Collection<GrantedAuthority> authorities = new ArrayList<>(
 					this.authoritiesMapper.mapAuthorities(userDetails.getAuthorities()));
-			authorities.add(new SimpleGrantedAuthority(AUTHORITY));
+			authorities.add(FactorGrantedAuthority.fromAuthority(AUTHORITY));
 			return new CasAuthenticationToken(this.key, userDetails, credentials, authorities, userDetails, assertion);
 		}
 		catch (TicketValidationException ex) {

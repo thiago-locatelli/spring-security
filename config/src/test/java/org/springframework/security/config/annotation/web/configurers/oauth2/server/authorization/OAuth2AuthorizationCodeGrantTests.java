@@ -26,6 +26,7 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
 import java.util.Base64;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -115,7 +116,6 @@ import org.springframework.security.oauth2.server.authorization.client.JdbcRegis
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClient;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClientRepository;
 import org.springframework.security.oauth2.server.authorization.client.TestRegisteredClients;
-import org.springframework.security.oauth2.server.authorization.jackson2.TestingAuthenticationTokenMixin;
 import org.springframework.security.oauth2.server.authorization.settings.AuthorizationServerSettings;
 import org.springframework.security.oauth2.server.authorization.settings.ClientSettings;
 import org.springframework.security.oauth2.server.authorization.token.DelegatingOAuth2TokenGenerator;
@@ -359,7 +359,7 @@ public class OAuth2AuthorizationCodeGrantTests {
 		RegisteredClient registeredClient = TestRegisteredClients.registeredClient().build();
 		this.registeredClientRepository.save(registeredClient);
 
-		OAuth2Authorization authorization = TestOAuth2Authorizations.authorization(registeredClient).build();
+		OAuth2Authorization authorization = createAuthorization(registeredClient);
 		this.authorizationService.save(authorization);
 
 		OAuth2AccessTokenResponse accessTokenResponse = assertTokenRequestReturnsAccessTokenResponse(registeredClient,
@@ -384,7 +384,7 @@ public class OAuth2AuthorizationCodeGrantTests {
 		RegisteredClient registeredClient = TestRegisteredClients.registeredClient().build();
 		this.registeredClientRepository.save(registeredClient);
 
-		OAuth2Authorization authorization = TestOAuth2Authorizations.authorization(registeredClient).build();
+		OAuth2Authorization authorization = createAuthorization(registeredClient);
 		this.authorizationService.save(authorization);
 
 		assertTokenRequestReturnsAccessTokenResponse(registeredClient, authorization,
@@ -433,8 +433,6 @@ public class OAuth2AuthorizationCodeGrantTests {
 		MvcResult mvcResult = this.mvc
 			.perform(get(DEFAULT_AUTHORIZATION_ENDPOINT_URI)
 				.queryParams(getAuthorizationRequestParameters(registeredClient))
-				.queryParam(PkceParameterNames.CODE_CHALLENGE, S256_CODE_CHALLENGE)
-				.queryParam(PkceParameterNames.CODE_CHALLENGE_METHOD, "S256")
 				.with(user("user")))
 			.andExpect(status().is3xxRedirection())
 			.andReturn();
@@ -451,8 +449,7 @@ public class OAuth2AuthorizationCodeGrantTests {
 		this.mvc
 			.perform(post(DEFAULT_TOKEN_ENDPOINT_URI)
 				.params(getTokenRequestParameters(registeredClient, authorizationCodeAuthorization))
-				.param(OAuth2ParameterNames.CLIENT_ID, registeredClient.getClientId())
-				.param(PkceParameterNames.CODE_VERIFIER, S256_CODE_VERIFIER))
+				.param(OAuth2ParameterNames.CLIENT_ID, registeredClient.getClientId()))
 			.andExpect(header().string(HttpHeaders.CACHE_CONTROL, containsString("no-store")))
 			.andExpect(header().string(HttpHeaders.PRAGMA, containsString("no-cache")))
 			.andExpect(status().isOk())
@@ -487,8 +484,6 @@ public class OAuth2AuthorizationCodeGrantTests {
 		MvcResult mvcResult = this.mvc
 			.perform(get(DEFAULT_AUTHORIZATION_ENDPOINT_URI)
 				.queryParams(getAuthorizationRequestParameters(registeredClient))
-				.queryParam(PkceParameterNames.CODE_CHALLENGE, S256_CODE_CHALLENGE)
-				.queryParam(PkceParameterNames.CODE_CHALLENGE_METHOD, "S256")
 				.with(user("user")))
 			.andExpect(status().is3xxRedirection())
 			.andReturn();
@@ -505,8 +500,7 @@ public class OAuth2AuthorizationCodeGrantTests {
 		this.mvc
 			.perform(post(DEFAULT_TOKEN_ENDPOINT_URI)
 				.params(getTokenRequestParameters(registeredClient, authorizationCodeAuthorization))
-				.param(OAuth2ParameterNames.CLIENT_ID, registeredClient.getClientId())
-				.param(PkceParameterNames.CODE_VERIFIER, S256_CODE_VERIFIER))
+				.param(OAuth2ParameterNames.CLIENT_ID, registeredClient.getClientId()))
 			.andExpect(header().string(HttpHeaders.CACHE_CONTROL, containsString("no-store")))
 			.andExpect(header().string(HttpHeaders.PRAGMA, containsString("no-cache")))
 			.andExpect(status().isOk())
@@ -542,11 +536,11 @@ public class OAuth2AuthorizationCodeGrantTests {
 		tokenRequestParameters.set(OAuth2ParameterNames.CODE, "");
 		tokenRequestParameters.set(OAuth2ParameterNames.REDIRECT_URI,
 				registeredClient.getRedirectUris().iterator().next());
+		tokenRequestParameters.set(PkceParameterNames.CODE_VERIFIER, S256_CODE_VERIFIER);
 
 		this.mvc
 			.perform(post(DEFAULT_TOKEN_ENDPOINT_URI).params(tokenRequestParameters)
-				.param(OAuth2ParameterNames.CLIENT_ID, registeredClient.getClientId())
-				.param(PkceParameterNames.CODE_VERIFIER, S256_CODE_VERIFIER))
+				.param(OAuth2ParameterNames.CLIENT_ID, registeredClient.getClientId()))
 			.andExpect(status().isBadRequest());
 	}
 
@@ -561,8 +555,6 @@ public class OAuth2AuthorizationCodeGrantTests {
 				registeredClient);
 		MvcResult mvcResult = this.mvc
 			.perform(get(DEFAULT_AUTHORIZATION_ENDPOINT_URI).queryParams(authorizationRequestParameters)
-				.queryParam(PkceParameterNames.CODE_CHALLENGE, S256_CODE_CHALLENGE)
-				.queryParam(PkceParameterNames.CODE_CHALLENGE_METHOD, "S256")
 				.with(user("user")))
 			.andExpect(status().is3xxRedirection())
 			.andReturn();
@@ -577,9 +569,12 @@ public class OAuth2AuthorizationCodeGrantTests {
 		assertThat(authorizationCodeAuthorization.getAuthorizationGrantType())
 			.isEqualTo(AuthorizationGrantType.AUTHORIZATION_CODE);
 
+		MultiValueMap<String, String> tokenRequestParameters = getTokenRequestParameters(registeredClient,
+				authorizationCodeAuthorization);
+		tokenRequestParameters.remove(PkceParameterNames.CODE_VERIFIER);
+
 		this.mvc
-			.perform(post(DEFAULT_TOKEN_ENDPOINT_URI)
-				.params(getTokenRequestParameters(registeredClient, authorizationCodeAuthorization))
+			.perform(post(DEFAULT_TOKEN_ENDPOINT_URI).params(tokenRequestParameters)
 				.param(OAuth2ParameterNames.CLIENT_ID, registeredClient.getClientId())
 				.header(HttpHeaders.AUTHORIZATION, getAuthorizationHeader(registeredClient)))
 			.andExpect(status().isBadRequest());
@@ -595,11 +590,12 @@ public class OAuth2AuthorizationCodeGrantTests {
 		RegisteredClient registeredClient = TestRegisteredClients.registeredClient().redirectUris((redirectUris) -> {
 			redirectUris.clear();
 			redirectUris.add(redirectUri);
-		}).clientSettings(ClientSettings.builder().requireProofKey(true).build()).build();
+		}).build();
 		this.registeredClientRepository.save(registeredClient);
 
 		MultiValueMap<String, String> authorizationRequestParameters = getAuthorizationRequestParameters(
 				registeredClient);
+		authorizationRequestParameters.remove(PkceParameterNames.CODE_CHALLENGE);
 		MvcResult mvcResult = this.mvc
 			.perform(get(DEFAULT_AUTHORIZATION_ENDPOINT_URI).queryParams(authorizationRequestParameters)
 				.with(user("user")))
@@ -618,11 +614,14 @@ public class OAuth2AuthorizationCodeGrantTests {
 			throws Exception {
 		this.spring.register(AuthorizationServerConfiguration.class).autowire();
 
-		RegisteredClient registeredClient = TestRegisteredClients.registeredClient().build();
+		RegisteredClient registeredClient = TestRegisteredClients.registeredClient()
+			.clientSettings(ClientSettings.builder().requireProofKey(false).build())
+			.build();
 		this.registeredClientRepository.save(registeredClient);
 
 		MultiValueMap<String, String> authorizationRequestParameters = getAuthorizationRequestParameters(
 				registeredClient);
+		authorizationRequestParameters.remove(PkceParameterNames.CODE_CHALLENGE);
 		MvcResult mvcResult = this.mvc
 			.perform(get(DEFAULT_AUTHORIZATION_ENDPOINT_URI).queryParams(authorizationRequestParameters)
 				.with(user("user")))
@@ -642,7 +641,6 @@ public class OAuth2AuthorizationCodeGrantTests {
 		this.mvc
 			.perform(post(DEFAULT_TOKEN_ENDPOINT_URI)
 				.params(getTokenRequestParameters(registeredClient, authorizationCodeAuthorization))
-				.param(PkceParameterNames.CODE_VERIFIER, S256_CODE_VERIFIER)
 				.header(HttpHeaders.AUTHORIZATION, getAuthorizationHeader(registeredClient)))
 			.andExpect(status().isBadRequest());
 	}
@@ -654,7 +652,7 @@ public class OAuth2AuthorizationCodeGrantTests {
 		RegisteredClient registeredClient = TestRegisteredClients.registeredClient().build();
 		this.registeredClientRepository.save(registeredClient);
 
-		OAuth2Authorization authorization = TestOAuth2Authorizations.authorization(registeredClient).build();
+		OAuth2Authorization authorization = createAuthorization(registeredClient);
 		this.authorizationService.save(authorization);
 
 		this.mvc
@@ -704,10 +702,14 @@ public class OAuth2AuthorizationCodeGrantTests {
 		OAuth2Authorization authorization = TestOAuth2Authorizations.authorization(registeredClient)
 			.principalName("user")
 			.build();
+		Map<String, Object> additionalParameters = new HashMap<>();
+		additionalParameters.put(PkceParameterNames.CODE_CHALLENGE, S256_CODE_CHALLENGE);
+		additionalParameters.put(PkceParameterNames.CODE_CHALLENGE_METHOD, "S256");
 		OAuth2AuthorizationRequest authorizationRequest = authorization
 			.getAttribute(OAuth2AuthorizationRequest.class.getName());
 		OAuth2AuthorizationRequest updatedAuthorizationRequest = OAuth2AuthorizationRequest.from(authorizationRequest)
 			.state(STATE_URL_UNENCODED)
+			.additionalParameters(additionalParameters)
 			.build();
 		authorization = OAuth2Authorization.from(authorization)
 			.attribute(OAuth2AuthorizationRequest.class.getName(), updatedAuthorizationRequest)
@@ -793,7 +795,7 @@ public class OAuth2AuthorizationCodeGrantTests {
 			.build();
 		this.registeredClientRepository.save(registeredClient);
 
-		OAuth2Authorization authorization = TestOAuth2Authorizations.authorization(registeredClient).build();
+		OAuth2Authorization authorization = createAuthorization(registeredClient);
 		OAuth2AuthorizationRequest authorizationRequest = authorization
 			.getAttribute(OAuth2AuthorizationRequest.class.getName());
 		OAuth2AuthorizationRequest updatedAuthorizationRequest = OAuth2AuthorizationRequest.from(authorizationRequest)
@@ -906,8 +908,6 @@ public class OAuth2AuthorizationCodeGrantTests {
 		MvcResult mvcResult = this.mvc
 			.perform(get(DEFAULT_AUTHORIZATION_ENDPOINT_URI)
 				.queryParams(getAuthorizationRequestParameters(registeredClient))
-				.queryParam(PkceParameterNames.CODE_CHALLENGE, S256_CODE_CHALLENGE)
-				.queryParam(PkceParameterNames.CODE_CHALLENGE_METHOD, "S256")
 				.with(user("user")))
 			.andExpect(status().is3xxRedirection())
 			.andReturn();
@@ -926,8 +926,7 @@ public class OAuth2AuthorizationCodeGrantTests {
 		mvcResult = this.mvc
 			.perform(post(DEFAULT_TOKEN_ENDPOINT_URI)
 				.params(getTokenRequestParameters(registeredClient, authorizationCodeAuthorization))
-				.param(OAuth2ParameterNames.CLIENT_ID, registeredClient.getClientId())
-				.param(PkceParameterNames.CODE_VERIFIER, S256_CODE_VERIFIER))
+				.param(OAuth2ParameterNames.CLIENT_ID, registeredClient.getClientId()))
 			.andExpect(header().string(HttpHeaders.CACHE_CONTROL, containsString("no-store")))
 			.andExpect(header().string(HttpHeaders.PRAGMA, containsString("no-cache")))
 			.andExpect(status().isOk())
@@ -956,8 +955,6 @@ public class OAuth2AuthorizationCodeGrantTests {
 		MvcResult mvcResult = this.mvc
 			.perform(get(issuer.concat(DEFAULT_AUTHORIZATION_ENDPOINT_URI))
 				.queryParams(getAuthorizationRequestParameters(registeredClient))
-				.queryParam(PkceParameterNames.CODE_CHALLENGE, S256_CODE_CHALLENGE)
-				.queryParam(PkceParameterNames.CODE_CHALLENGE_METHOD, "S256")
 				.with(user("user")))
 			.andExpect(status().is3xxRedirection())
 			.andReturn();
@@ -969,8 +966,7 @@ public class OAuth2AuthorizationCodeGrantTests {
 		this.mvc
 			.perform(post(issuer.concat(DEFAULT_TOKEN_ENDPOINT_URI))
 				.params(getTokenRequestParameters(registeredClient, authorizationCodeAuthorization))
-				.param(OAuth2ParameterNames.CLIENT_ID, registeredClient.getClientId())
-				.param(PkceParameterNames.CODE_VERIFIER, S256_CODE_VERIFIER))
+				.param(OAuth2ParameterNames.CLIENT_ID, registeredClient.getClientId()))
 			.andExpect(header().string(HttpHeaders.CACHE_CONTROL, containsString("no-store")))
 			.andExpect(header().string(HttpHeaders.PRAGMA, containsString("no-cache")))
 			.andExpect(status().isOk())
@@ -994,7 +990,7 @@ public class OAuth2AuthorizationCodeGrantTests {
 		RegisteredClient registeredClient = TestRegisteredClients.registeredClient().build();
 		this.registeredClientRepository.save(registeredClient);
 
-		OAuth2Authorization authorization = TestOAuth2Authorizations.authorization(registeredClient).build();
+		OAuth2Authorization authorization = createAuthorization(registeredClient);
 		this.authorizationService.save(authorization);
 
 		String tokenEndpointUri = "http://localhost" + DEFAULT_TOKEN_ENDPOINT_URI;
@@ -1025,8 +1021,6 @@ public class OAuth2AuthorizationCodeGrantTests {
 
 		MvcResult mvcResult = this.mvc
 			.perform(post("/oauth2/par").params(getAuthorizationRequestParameters(registeredClient))
-				.param(PkceParameterNames.CODE_CHALLENGE, S256_CODE_CHALLENGE)
-				.param(PkceParameterNames.CODE_CHALLENGE_METHOD, "S256")
 				.header(HttpHeaders.AUTHORIZATION, getAuthorizationHeader(registeredClient)))
 			.andExpect(header().string(HttpHeaders.CACHE_CONTROL, containsString("no-store")))
 			.andExpect(header().string(HttpHeaders.PRAGMA, containsString("no-cache")))
@@ -1053,7 +1047,6 @@ public class OAuth2AuthorizationCodeGrantTests {
 			.perform(post(DEFAULT_TOKEN_ENDPOINT_URI)
 				.params(getTokenRequestParameters(registeredClient, authorizationCodeAuthorization))
 				.param(OAuth2ParameterNames.CLIENT_ID, registeredClient.getClientId())
-				.param(PkceParameterNames.CODE_VERIFIER, S256_CODE_VERIFIER)
 				.header(HttpHeaders.AUTHORIZATION, getAuthorizationHeader(registeredClient)))
 			.andExpect(header().string(HttpHeaders.CACHE_CONTROL, containsString("no-store")))
 			.andExpect(header().string(HttpHeaders.PRAGMA, containsString("no-cache")))
@@ -1075,6 +1068,101 @@ public class OAuth2AuthorizationCodeGrantTests {
 		assertThat(authorizationCodeToken).isNotNull();
 		assertThat(authorizationCodeToken.getMetadata().get(OAuth2Authorization.Token.INVALIDATED_METADATA_NAME))
 			.isEqualTo(true);
+	}
+
+	// gh-2182
+	@Test
+	public void requestWhenPushedAuthorizationRequestAndRequiresConsentThenDisplaysConsentPage() throws Exception {
+		this.spring.register(AuthorizationServerConfigurationWithPushedAuthorizationRequests.class).autowire();
+
+		RegisteredClient registeredClient = TestRegisteredClients.registeredClient().scopes((scopes) -> {
+			scopes.clear();
+			scopes.add("message.read");
+			scopes.add("message.write");
+		}).clientSettings(ClientSettings.builder().requireAuthorizationConsent(true).build()).build();
+		this.registeredClientRepository.save(registeredClient);
+
+		MvcResult mvcResult = this.mvc
+			.perform(post("/oauth2/par").params(getAuthorizationRequestParameters(registeredClient))
+				.header(HttpHeaders.AUTHORIZATION, getAuthorizationHeader(registeredClient)))
+			.andExpect(header().string(HttpHeaders.CACHE_CONTROL, containsString("no-store")))
+			.andExpect(header().string(HttpHeaders.PRAGMA, containsString("no-cache")))
+			.andExpect(status().isCreated())
+			.andExpect(jsonPath("$.request_uri").isNotEmpty())
+			.andExpect(jsonPath("$.expires_in").isNotEmpty())
+			.andReturn();
+
+		String requestUri = JsonPath.read(mvcResult.getResponse().getContentAsString(), "$.request_uri");
+
+		String consentPage = this.mvc
+			.perform(get(DEFAULT_AUTHORIZATION_ENDPOINT_URI)
+				.queryParam(OAuth2ParameterNames.CLIENT_ID, registeredClient.getClientId())
+				.queryParam(OAuth2ParameterNames.REQUEST_URI, requestUri)
+				.with(user("user")))
+			.andExpect(status().is2xxSuccessful())
+			.andReturn()
+			.getResponse()
+			.getContentAsString();
+
+		assertThat(consentPage).contains("Consent required");
+		assertThat(consentPage).contains(scopeCheckbox("message.read"));
+		assertThat(consentPage).contains(scopeCheckbox("message.write"));
+	}
+
+	// gh-2182
+	@Test
+	public void requestWhenPushedAuthorizationRequestAndCustomConsentPageConfiguredThenRedirect() throws Exception {
+		this.spring.register(AuthorizationServerConfigurationWithPushedAuthorizationRequestsAndCustomConsentPage.class)
+			.autowire();
+
+		RegisteredClient registeredClient = TestRegisteredClients.registeredClient().scopes((scopes) -> {
+			scopes.clear();
+			scopes.add("message.read");
+			scopes.add("message.write");
+		}).clientSettings(ClientSettings.builder().requireAuthorizationConsent(true).build()).build();
+		this.registeredClientRepository.save(registeredClient);
+
+		MvcResult mvcResult = this.mvc
+			.perform(post("/oauth2/par").params(getAuthorizationRequestParameters(registeredClient))
+				.header(HttpHeaders.AUTHORIZATION, getAuthorizationHeader(registeredClient)))
+			.andExpect(header().string(HttpHeaders.CACHE_CONTROL, containsString("no-store")))
+			.andExpect(header().string(HttpHeaders.PRAGMA, containsString("no-cache")))
+			.andExpect(status().isCreated())
+			.andExpect(jsonPath("$.request_uri").isNotEmpty())
+			.andExpect(jsonPath("$.expires_in").isNotEmpty())
+			.andReturn();
+
+		String requestUri = JsonPath.read(mvcResult.getResponse().getContentAsString(), "$.request_uri");
+
+		mvcResult = this.mvc
+			.perform(get(DEFAULT_AUTHORIZATION_ENDPOINT_URI)
+				.queryParam(OAuth2ParameterNames.CLIENT_ID, registeredClient.getClientId())
+				.queryParam(OAuth2ParameterNames.REQUEST_URI, requestUri)
+				.with(user("user")))
+			.andExpect(status().is3xxRedirection())
+			.andReturn();
+		String redirectedUrl = mvcResult.getResponse().getRedirectedUrl();
+		assertThat(redirectedUrl).matches("http://localhost/oauth2/consent\\?scope=.+&client_id=.+&state=.+");
+
+		String locationHeader = URLDecoder.decode(redirectedUrl, StandardCharsets.UTF_8.name());
+		UriComponents uriComponents = UriComponentsBuilder.fromUriString(locationHeader).build();
+		MultiValueMap<String, String> redirectQueryParams = uriComponents.getQueryParams();
+
+		assertThat(uriComponents.getPath()).isEqualTo(consentPage);
+		assertThat(redirectQueryParams.getFirst(OAuth2ParameterNames.SCOPE)).isEqualTo("message.read message.write");
+		assertThat(redirectQueryParams.getFirst(OAuth2ParameterNames.CLIENT_ID))
+			.isEqualTo(registeredClient.getClientId());
+
+		String state = extractParameterFromRedirectUri(redirectedUrl, "state");
+		OAuth2Authorization authorization = this.authorizationService.findByToken(state, STATE_TOKEN_TYPE);
+		assertThat(authorization).isNotNull();
+	}
+
+	private static OAuth2Authorization createAuthorization(RegisteredClient registeredClient) {
+		Map<String, Object> additionalParameters = new HashMap<>();
+		additionalParameters.put(PkceParameterNames.CODE_CHALLENGE, S256_CODE_CHALLENGE);
+		additionalParameters.put(PkceParameterNames.CODE_CHALLENGE_METHOD, "S256");
+		return TestOAuth2Authorizations.authorization(registeredClient, additionalParameters).build();
 	}
 
 	private static String generateDPoPProof(String tokenEndpointUri) {
@@ -1105,6 +1193,8 @@ public class OAuth2AuthorizationCodeGrantTests {
 		parameters.set(OAuth2ParameterNames.SCOPE,
 				StringUtils.collectionToDelimitedString(registeredClient.getScopes(), " "));
 		parameters.set(OAuth2ParameterNames.STATE, STATE_URL_UNENCODED);
+		parameters.set(PkceParameterNames.CODE_CHALLENGE, S256_CODE_CHALLENGE);
+		parameters.set(PkceParameterNames.CODE_CHALLENGE_METHOD, "S256");
 		return parameters;
 	}
 
@@ -1115,14 +1205,15 @@ public class OAuth2AuthorizationCodeGrantTests {
 		parameters.set(OAuth2ParameterNames.CODE,
 				authorization.getToken(OAuth2AuthorizationCode.class).getToken().getTokenValue());
 		parameters.set(OAuth2ParameterNames.REDIRECT_URI, registeredClient.getRedirectUris().iterator().next());
+		parameters.set(PkceParameterNames.CODE_VERIFIER, S256_CODE_VERIFIER);
 		return parameters;
 	}
 
 	private static String getAuthorizationHeader(RegisteredClient registeredClient) throws Exception {
 		String clientId = registeredClient.getClientId();
 		String clientSecret = registeredClient.getClientSecret();
-		clientId = URLEncoder.encode(clientId, StandardCharsets.UTF_8.name());
-		clientSecret = URLEncoder.encode(clientSecret, StandardCharsets.UTF_8.name());
+		clientId = URLEncoder.encode(clientId, StandardCharsets.UTF_8);
+		clientSecret = URLEncoder.encode(clientSecret, StandardCharsets.UTF_8);
 		String credentialsString = clientId + ":" + clientSecret;
 		byte[] encodedBytes = Base64.getEncoder().encode(credentialsString.getBytes(StandardCharsets.UTF_8));
 		return "Basic " + new String(encodedBytes, StandardCharsets.UTF_8);
@@ -1147,11 +1238,7 @@ public class OAuth2AuthorizationCodeGrantTests {
 		@Bean
 		OAuth2AuthorizationService authorizationService(JdbcOperations jdbcOperations,
 				RegisteredClientRepository registeredClientRepository) {
-			JdbcOAuth2AuthorizationService authorizationService = new JdbcOAuth2AuthorizationService(jdbcOperations,
-					registeredClientRepository);
-			authorizationService.setAuthorizationRowMapper(new RowMapper(registeredClientRepository));
-			authorizationService.setAuthorizationParametersMapper(new ParametersMapper());
-			return authorizationService;
+			return new JdbcOAuth2AuthorizationService(jdbcOperations, registeredClientRepository);
 		}
 
 		@Bean
@@ -1202,24 +1289,6 @@ public class OAuth2AuthorizationCodeGrantTests {
 		@Bean
 		PasswordEncoder passwordEncoder() {
 			return NoOpPasswordEncoder.getInstance();
-		}
-
-		static class RowMapper extends JdbcOAuth2AuthorizationService.OAuth2AuthorizationRowMapper {
-
-			RowMapper(RegisteredClientRepository registeredClientRepository) {
-				super(registeredClientRepository);
-				getObjectMapper().addMixIn(TestingAuthenticationToken.class, TestingAuthenticationTokenMixin.class);
-			}
-
-		}
-
-		static class ParametersMapper extends JdbcOAuth2AuthorizationService.OAuth2AuthorizationParametersMapper {
-
-			ParametersMapper() {
-				super();
-				getObjectMapper().addMixIn(TestingAuthenticationToken.class, TestingAuthenticationTokenMixin.class);
-			}
-
 		}
 
 	}
@@ -1482,6 +1551,30 @@ public class OAuth2AuthorizationCodeGrantTests {
 					.oauth2AuthorizationServer((authorizationServer) ->
 							authorizationServer
 									.pushedAuthorizationRequestEndpoint(Customizer.withDefaults())
+					)
+					.authorizeHttpRequests((authorize) ->
+							authorize.anyRequest().authenticated()
+					);
+			return http.build();
+		}
+		// @formatter:on
+
+	}
+
+	@EnableWebSecurity
+	@Configuration(proxyBeanMethods = false)
+	static class AuthorizationServerConfigurationWithPushedAuthorizationRequestsAndCustomConsentPage
+			extends AuthorizationServerConfiguration {
+
+		// @formatter:off
+		@Bean
+		SecurityFilterChain authorizationServerSecurityFilterChain(HttpSecurity http) throws Exception {
+			http
+					.oauth2AuthorizationServer((authorizationServer) ->
+							authorizationServer
+									.pushedAuthorizationRequestEndpoint(Customizer.withDefaults())
+									.authorizationEndpoint((authorizationEndpoint) ->
+											authorizationEndpoint.consentPage(consentPage))
 					)
 					.authorizeHttpRequests((authorize) ->
 							authorize.anyRequest().authenticated()

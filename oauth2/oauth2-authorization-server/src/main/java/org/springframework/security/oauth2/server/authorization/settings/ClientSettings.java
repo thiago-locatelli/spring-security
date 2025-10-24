@@ -44,7 +44,7 @@ public final class ClientSettings extends AbstractSettings {
 	/**
 	 * Returns {@code true} if the client is required to provide a proof key challenge and
 	 * verifier when performing the Authorization Code Grant flow. The default is
-	 * {@code false}.
+	 * {@code true}.
 	 * @return {@code true} if the client is required to provide a proof key challenge and
 	 * verifier, {@code false} otherwise
 	 */
@@ -99,7 +99,7 @@ public final class ClientSettings extends AbstractSettings {
 	 * @return the {@link Builder}
 	 */
 	public static Builder builder() {
-		return new Builder().requireProofKey(false).requireAuthorizationConsent(false);
+		return new Builder().requireProofKey(true).requireAuthorizationConsent(false);
 	}
 
 	/**
@@ -133,8 +133,7 @@ public final class ClientSettings extends AbstractSettings {
 
 		/**
 		 * Set to {@code true} if authorization consent is required when the client
-		 * requests access. This applies to all interactive flows (e.g.
-		 * {@code authorization_code} and {@code device_code}).
+		 * requests access. This applies to {@code authorization_code} flow.
 		 * @param requireAuthorizationConsent {@code true} if authorization consent is
 		 * required when the client requests access, {@code false} otherwise
 		 * @return the {@link Builder} for further configuration

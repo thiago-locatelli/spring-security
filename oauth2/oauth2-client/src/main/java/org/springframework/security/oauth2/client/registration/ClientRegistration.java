@@ -701,12 +701,13 @@ public final class ClientRegistration implements Serializable {
 							"AuthorizationGrantType: %s does not match the pre-defined constant %s and won't match a valid OAuth2AuthorizedClientProvider",
 							this.authorizationGrantType, authorizationGrantType));
 				}
-				if (!AuthorizationGrantType.AUTHORIZATION_CODE.equals(this.authorizationGrantType)
-						&& this.clientSettings.isRequireProofKey()) {
-					throw new IllegalStateException(
-							"clientSettings.isRequireProofKey=true is only valid with authorizationGrantType=AUTHORIZATION_CODE. Got authorizationGrantType="
-									+ this.authorizationGrantType);
-				}
+			}
+			if (!AuthorizationGrantType.AUTHORIZATION_CODE.equals(this.authorizationGrantType)
+					&& this.clientSettings.isRequireProofKey()) {
+				this.clientSettings = ClientSettings.builder().requireProofKey(false).build();
+				logger.warn(LogMessage.format(
+						"clientSettings.isRequireProofKey=true is only valid with authorizationGrantType=%s. Got authorizationGrantType=%s. Resetting to clientSettings.isRequireProofKey=false",
+						AuthorizationGrantType.AUTHORIZATION_CODE, this.authorizationGrantType));
 			}
 		}
 
@@ -779,7 +780,7 @@ public final class ClientRegistration implements Serializable {
 
 		public static final class Builder {
 
-			private boolean requireProofKey;
+			private boolean requireProofKey = true;
 
 			private Builder() {
 			}

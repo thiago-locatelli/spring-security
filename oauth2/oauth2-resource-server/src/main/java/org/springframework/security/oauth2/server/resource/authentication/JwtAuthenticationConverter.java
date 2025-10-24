@@ -21,9 +21,8 @@ import java.util.HashSet;
 
 import org.springframework.core.convert.converter.Converter;
 import org.springframework.security.authentication.AbstractAuthenticationToken;
-import org.springframework.security.core.GrantedAuthorities;
 import org.springframework.security.core.GrantedAuthority;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.authority.FactorGrantedAuthority;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtClaimNames;
 import org.springframework.util.Assert;
@@ -37,7 +36,7 @@ import org.springframework.util.Assert;
  */
 public class JwtAuthenticationConverter implements Converter<Jwt, AbstractAuthenticationToken> {
 
-	private static final String AUTHORITY = GrantedAuthorities.FACTOR_BEARER_AUTHORITY;
+	private static final String AUTHORITY = FactorGrantedAuthority.BEARER_AUTHORITY;
 
 	private Converter<Jwt, Collection<GrantedAuthority>> jwtGrantedAuthoritiesConverter = new JwtGrantedAuthoritiesConverter();
 
@@ -46,7 +45,7 @@ public class JwtAuthenticationConverter implements Converter<Jwt, AbstractAuthen
 	@Override
 	public final AbstractAuthenticationToken convert(Jwt jwt) {
 		Collection<GrantedAuthority> authorities = new HashSet<>(this.jwtGrantedAuthoritiesConverter.convert(jwt));
-		authorities.add(new SimpleGrantedAuthority(AUTHORITY));
+		authorities.add(FactorGrantedAuthority.fromAuthority(AUTHORITY));
 		String principalClaimValue = jwt.getClaimAsString(this.principalClaimName);
 		return new JwtAuthenticationToken(jwt, authorities, principalClaimValue);
 	}

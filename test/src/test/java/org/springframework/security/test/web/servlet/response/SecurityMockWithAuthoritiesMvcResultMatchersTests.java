@@ -27,8 +27,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
-import org.springframework.security.core.GrantedAuthorities;
 import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.FactorGrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -67,12 +67,10 @@ public class SecurityMockWithAuthoritiesMvcResultMatchersTests {
 	}
 
 	@Test
-	public void withAuthoritiesNotOrderSensitive() throws Exception {
-		List<SimpleGrantedAuthority> grantedAuthorities = new ArrayList<>();
-		grantedAuthorities.add(new SimpleGrantedAuthority("ROLE_ADMIN"));
-		grantedAuthorities.add(new SimpleGrantedAuthority("ROLE_SELLER"));
-		grantedAuthorities.add(new SimpleGrantedAuthority(GrantedAuthorities.FACTOR_PASSWORD_AUTHORITY));
-		this.mockMvc.perform(formLogin()).andExpect(authenticated().withAuthorities(grantedAuthorities));
+	public void withAuthoritiesStringAllowsAnyOrderAndPermitsAnyImpl() throws Exception {
+		this.mockMvc.perform(formLogin())
+			.andExpect(authenticated().withAuthorities("ROLE_ADMIN", "ROLE_SELLER",
+					FactorGrantedAuthority.PASSWORD_AUTHORITY));
 	}
 
 	@Test
@@ -86,7 +84,7 @@ public class SecurityMockWithAuthoritiesMvcResultMatchersTests {
 	@Test
 	public void withAuthoritiesStringSupportsCustomAuthority() throws Exception {
 		this.mockMvc.perform(formLogin().user("custom"))
-			.andExpect(authenticated().withAuthorities(ROLE_CUSTOM, GrantedAuthorities.FACTOR_PASSWORD_AUTHORITY));
+			.andExpect(authenticated().withAuthorities(ROLE_CUSTOM, FactorGrantedAuthority.PASSWORD_AUTHORITY));
 	}
 
 	@Configuration
