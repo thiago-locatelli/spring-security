@@ -19,10 +19,13 @@ package org.springframework.security.config.annotation.web.configurers;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.config.BeanPostProcessor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpOutputMessage;
@@ -42,6 +45,7 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.ui.DefaultResourcesFilter;
 import org.springframework.security.web.webauthn.api.PublicKeyCredentialCreationOptions;
 import org.springframework.security.web.webauthn.api.TestPublicKeyCredentialCreationOptions;
+import org.springframework.security.web.webauthn.authentication.WebAuthnAuthenticationFilter;
 import org.springframework.security.web.webauthn.management.WebAuthnRelyingPartyOperations;
 import org.springframework.security.web.webauthn.registration.HttpSessionPublicKeyCredentialCreationOptionsRepository;
 import org.springframework.test.web.servlet.MockMvc;
@@ -52,6 +56,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willAnswer;
 import static org.mockito.Mockito.mock;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -86,6 +92,14 @@ public class WebAuthnConfigurerTests {
 			.andExpect(status().isOk())
 			.andExpect(header().string("content-type", "text/css;charset=UTF-8"))
 			.andExpect(content().string(containsString("body {")));
+	}
+
+	// gh-18128
+	@Test
+	public void webAuthnAuthenticationFilterIsPostProcessed() throws Exception {
+		this.spring.register(DefaultWebauthnConfiguration.class, PostProcessorConfiguration.class).autowire();
+		PostProcessorConfiguration postProcess = this.spring.getContext().getBean(PostProcessorConfiguration.class);
+		assertThat(postProcess.webauthnFilter).isNotNull();
 	}
 
 	@Test
@@ -125,6 +139,42 @@ public class WebAuthnConfigurerTests {
 		assertThat(defaultResourcesFilters).map(DefaultResourcesFilter::toString)
 			.filteredOn((filterDescription) -> filterDescription.contains("default-ui.css"))
 			.hasSize(1);
+	}
+
+	@Test
+	void webauthnWhenConfiguredDefaultsRpNameToRpId() throws Exception {
+		ObjectMapper mapper = new ObjectMapper();
+		this.spring.register(DefaultWebauthnConfiguration.class).autowire();
+		String response = this.mvc
+			.perform(post("/webauthn/register/options").with(csrf())
+				.with(authentication(new TestingAuthenticationToken("test", "ignored", "ROLE_user"))))
+			.andExpect(status().is2xxSuccessful())
+			.andReturn()
+			.getResponse()
+			.getContentAsString();
+
+		JsonNode parsedResponse = mapper.readTree(response);
+
+		assertThat(parsedResponse.get("rp").get("id").asText()).isEqualTo("example.com");
+		assertThat(parsedResponse.get("rp").get("name").asText()).isEqualTo("example.com");
+	}
+
+	@Test
+	void webauthnWhenRpNameConfiguredUsesRpName() throws Exception {
+		ObjectMapper mapper = new ObjectMapper();
+		this.spring.register(CustomRpNameWebauthnConfiguration.class).autowire();
+		String response = this.mvc
+			.perform(post("/webauthn/register/options").with(csrf())
+				.with(authentication(new TestingAuthenticationToken("test", "ignored", "ROLE_user"))))
+			.andExpect(status().is2xxSuccessful())
+			.andReturn()
+			.getResponse()
+			.getContentAsString();
+
+		JsonNode parsedResponse = mapper.readTree(response);
+
+		assertThat(parsedResponse.get("rp").get("id").asText()).isEqualTo("example.com");
+		assertThat(parsedResponse.get("rp").get("name").asText()).isEqualTo("Test RP Name");
 	}
 
 	@Test
@@ -289,6 +339,26 @@ public class WebAuthnConfigurerTests {
 
 	}
 
+	@Configuration(proxyBeanMethods = false)
+	static class PostProcessorConfiguration {
+
+		WebAuthnAuthenticationFilter webauthnFilter;
+
+		@Bean
+		BeanPostProcessor beanPostProcessor() {
+			return new BeanPostProcessor() {
+				@Override
+				public Object postProcessAfterInitialization(Object bean, String beanName) {
+					if (bean instanceof WebAuthnAuthenticationFilter filter) {
+						PostProcessorConfiguration.this.webauthnFilter = filter;
+					}
+					return bean;
+				}
+			};
+		}
+
+	}
+
 	@Configuration
 	@EnableWebSecurity
 	static class DefaultWebauthnConfiguration {
@@ -304,11 +374,28 @@ public class WebAuthnConfigurerTests {
 			http
 				.formLogin(Customizer.withDefaults())
 				.webAuthn((authn) -> authn
-					.rpId("spring.io")
-					.rpName("spring")
+					.rpId("example.com")
 				);
 			// @formatter:on
 			return http.build();
+		}
+
+	}
+
+	@Configuration
+	@EnableWebSecurity
+	static class CustomRpNameWebauthnConfiguration {
+
+		@Bean
+		UserDetailsService userDetailsService() {
+			return new InMemoryUserDetailsManager();
+		}
+
+		@Bean
+		SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+			return http.formLogin(Customizer.withDefaults())
+				.webAuthn((webauthn) -> webauthn.rpId("example.com").rpName("Test RP Name"))
+				.build();
 		}
 
 	}

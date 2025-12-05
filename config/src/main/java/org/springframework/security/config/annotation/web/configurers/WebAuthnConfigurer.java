@@ -177,6 +177,7 @@ public class WebAuthnConfigurer<H extends HttpSecurityBuilder<H>>
 		WebAuthnAuthenticationFilter webAuthnAuthnFilter = new WebAuthnAuthenticationFilter();
 		webAuthnAuthnFilter.setAuthenticationManager(
 				new ProviderManager(new WebAuthnAuthenticationProvider(rpOperations, userDetailsService)));
+		webAuthnAuthnFilter = postProcess(webAuthnAuthnFilter);
 		WebAuthnRegistrationFilter webAuthnRegistrationFilter = new WebAuthnRegistrationFilter(userCredentials,
 				rpOperations);
 		PublicKeyCredentialCreationOptionsFilter creationOptionsFilter = new PublicKeyCredentialCreationOptionsFilter(
@@ -256,9 +257,10 @@ public class WebAuthnConfigurer<H extends HttpSecurityBuilder<H>>
 			PublicKeyCredentialUserEntityRepository userEntities, UserCredentialRepository userCredentials) {
 		Optional<WebAuthnRelyingPartyOperations> webauthnOperationsBean = getBeanOrNull(
 				WebAuthnRelyingPartyOperations.class);
-		return webauthnOperationsBean.orElseGet(() -> new Webauthn4JRelyingPartyOperations(userEntities,
-				userCredentials, PublicKeyCredentialRpEntity.builder().id(this.rpId).name(this.rpName).build(),
-				this.allowedOrigins));
+		String rpName = (this.rpName != null) ? this.rpName : this.rpId;
+		return webauthnOperationsBean
+			.orElseGet(() -> new Webauthn4JRelyingPartyOperations(userEntities, userCredentials,
+					PublicKeyCredentialRpEntity.builder().id(this.rpId).name(rpName).build(), this.allowedOrigins));
 	}
 
 }
